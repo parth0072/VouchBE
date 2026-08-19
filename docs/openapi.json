@@ -1,0 +1,4349 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Vouch API",
+    "version": "0.1.0",
+    "description": "Two-sided marketplace: clients post briefs/send direct offers, creators bid/negotiate, both consent to terms before escrow funds, then draft -> approve -> live -> payout. Generated from the actual implementation in `src/` — every schema/example here is what the code returns, not a re-statement of the original spec. See `API.md` in the repo for the same content with prose explanations of every gap found between the original spec and the design files.",
+    "contact": {
+      "name": "parth0072/VouchBE",
+      "url": "https://github.com/parth0072/VouchBE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local dev"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Onboarding"
+    },
+    {
+      "name": "Briefs"
+    },
+    {
+      "name": "Bids"
+    },
+    {
+      "name": "Creators"
+    },
+    {
+      "name": "Offers"
+    },
+    {
+      "name": "Deals"
+    },
+    {
+      "name": "Agreement"
+    },
+    {
+      "name": "Escrow & Payments"
+    },
+    {
+      "name": "Drafts"
+    },
+    {
+      "name": "Reviews"
+    },
+    {
+      "name": "Messaging"
+    },
+    {
+      "name": "Notifications"
+    },
+    {
+      "name": "Settings"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "internalSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Internal-Secret"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Not found"
+          },
+          "details": {
+            "type": "object",
+            "nullable": true,
+            "description": "Present only on 400s from zod validation failures"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "TokenPair": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "ClientProfile": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "company_name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Lumen Skincare"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreatorProfile": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Reya Okafor"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "niches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "example": [
+              "beauty",
+              "product"
+            ]
+          },
+          "starting_rate": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column",
+            "nullable": true
+          },
+          "typical_turnaround_days": {
+            "type": "integer",
+            "nullable": true,
+            "example": 3
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "avg_rating": {
+            "type": "string",
+            "example": "4.9"
+          },
+          "review_count": {
+            "type": "integer",
+            "example": 38
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "active_role": {
+            "type": "string",
+            "enum": [
+              "client",
+              "creator"
+            ]
+          },
+          "has_client_profile": {
+            "type": "boolean"
+          },
+          "has_creator_profile": {
+            "type": "boolean"
+          },
+          "notification_prefs": {
+            "type": "object",
+            "nullable": true,
+            "example": {
+              "push": true,
+              "email_digest": false
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "client_profile": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClientProfile"
+              }
+            ],
+            "nullable": true
+          },
+          "creator_profile": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreatorProfile"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "SocialAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "tiktok",
+              "youtube",
+              "facebook"
+            ]
+          },
+          "handle": {
+            "type": "string",
+            "example": "reya.creates"
+          },
+          "follower_count": {
+            "type": "integer",
+            "example": 142000
+          },
+          "engagement_rate": {
+            "type": "string",
+            "nullable": true,
+            "example": "4.20"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "oauth_token_ref": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_synced_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          }
+        }
+      },
+      "PortfolioItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "media_url": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReferenceImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "brief_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "image_url": {
+            "type": "string"
+          }
+        }
+      },
+      "Brief": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "title": {
+            "type": "string",
+            "example": "15s product reel for launch"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "reel",
+              "ugc",
+              "youtube",
+              "tiktok",
+              "photo"
+            ]
+          },
+          "niche": {
+            "type": "string",
+            "example": "beauty",
+            "description": "Not in the original spec's data model — added; see docs/openapi.json generation notes"
+          },
+          "description": {
+            "type": "string"
+          },
+          "budget_min": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "budget_max": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-09-02"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "in_progress",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceImage"
+            }
+          },
+          "_count": {
+            "type": "object",
+            "properties": {
+              "bids": {
+                "type": "integer",
+                "example": 6
+              }
+            },
+            "description": "Only present on list/detail responses that select it"
+          }
+        }
+      },
+      "Bid": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "brief_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "price": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "delivery_days": {
+            "type": "integer",
+            "example": 3
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "declined"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "OfferRevision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "offer_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "proposed_by": {
+            "type": "string",
+            "enum": [
+              "client",
+              "creator"
+            ]
+          },
+          "price": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "turnaround_days": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "DirectOffer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "brief_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "nullable": true
+          },
+          "price": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "reel",
+              "ugc",
+              "youtube",
+              "tiktok",
+              "photo"
+            ]
+          },
+          "turnaround_days": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "countered",
+              "accepted",
+              "declined"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferRevision"
+            }
+          }
+        }
+      },
+      "Deal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "brief_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "nullable": true
+          },
+          "offer_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "bid",
+              "direct_offer"
+            ]
+          },
+          "agreed_price": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "negotiating",
+              "agreement_pending",
+              "escrow_funded",
+              "in_production",
+              "draft_submitted",
+              "changes_requested",
+              "approved",
+              "live",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "agreement": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Agreement"
+              }
+            ],
+            "nullable": true
+          },
+          "escrow": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Escrow"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "Agreement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "usage_rights": {
+            "type": "string",
+            "enum": [
+              "organic",
+              "paid_ads",
+              "whitelisting"
+            ]
+          },
+          "live_duration_days": {
+            "type": "integer",
+            "example": 60
+          },
+          "approval_required": {
+            "type": "boolean"
+          },
+          "min_views": {
+            "type": "integer",
+            "nullable": true
+          },
+          "client_consented_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "creator_consented_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          }
+        }
+      },
+      "Draft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "file_url": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitted",
+              "approved",
+              "changes_requested"
+            ]
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "client_feedback": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Escrow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "amount": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "funded_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "live_started_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "live_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "payout_released_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unfunded",
+              "held",
+              "released",
+              "refunded"
+            ]
+          }
+        }
+      },
+      "PaymentMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "provider_token": {
+            "type": "string",
+            "example": "pm_1P..."
+          },
+          "brand": {
+            "type": "string",
+            "example": "visa"
+          },
+          "last4": {
+            "type": "string",
+            "example": "4242"
+          },
+          "is_default": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PayoutMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "stripe_connect"
+            ]
+          },
+          "account_ref": {
+            "type": "string",
+            "example": "acct_..."
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "biweekly"
+            ]
+          }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "escrow_fund",
+              "payout",
+              "refund"
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "example": "450.00",
+            "description": "Decimal string at fixed scale, straight off a DECIMAL(10,2) column"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "provider_ref": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "sender_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "attachment_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "system_event": {
+            "type": "string",
+            "nullable": true,
+            "example": "agreement_confirmed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          },
+          "read_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          }
+        }
+      },
+      "Thread": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "participant_a_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "participant_b_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "nullable": true
+          },
+          "brief_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "nullable": true
+          },
+          "other_participant_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f",
+            "description": "Computed relative to the caller, not a stored column"
+          },
+          "last_message": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ],
+            "nullable": true
+          },
+          "is_unread": {
+            "type": "boolean",
+            "description": "Computed: true if last_message wasn't sent by the caller and has no read_at"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "type": {
+            "type": "string",
+            "description": "Free string, not a DB enum — open-ended set per the original spec",
+            "example": "escrow_funded",
+            "enum": [
+              "bid_received",
+              "offer_countered",
+              "escrow_funded",
+              "draft_submitted",
+              "draft_approved",
+              "changes_requested",
+              "review_received"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "example": {
+              "deal_id": "d41a...",
+              "amount": "450.00"
+            }
+          },
+          "read_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "PushToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "platform": {
+            "type": "string",
+            "example": "ios"
+          },
+          "token": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "Review": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "deal_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "reviewer_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "reviewee_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "great_communication",
+                "on_time",
+                "high_quality"
+              ]
+            }
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z"
+          }
+        }
+      },
+      "ReviewsForUser": {
+        "type": "object",
+        "properties": {
+          "avg_rating": {
+            "type": "string",
+            "nullable": true,
+            "example": "4.9"
+          },
+          "review_count": {
+            "type": "integer",
+            "example": 38
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Review"
+            }
+          }
+        }
+      },
+      "ReleaseDuePayoutsSummary": {
+        "type": "object",
+        "properties": {
+          "released": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dealId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or invalid bearer token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Missing bearer token"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Not the owner/participant/role this route requires",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Not your deal"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Not found"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource is in a state that doesn't allow this action",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "This bid is no longer pending"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Request body/query failed validation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Validation failed",
+              "details": {
+                "fieldErrors": {
+                  "email": [
+                    "Invalid email"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotConfigured": {
+        "description": "Real integration (Stripe/OAuth provider/internal secret) has no credentials configured yet — not faked",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Stripe is not configured (missing STRIPE_SECRET_KEY)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "summary": "Create an account (password or OAuth)",
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "password": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    },
+                    "required": [
+                      "email",
+                      "password"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "oauth_provider": {
+                        "type": "string"
+                      },
+                      "oauth_token": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "oauth_provider",
+                      "oauth_token"
+                    ]
+                  }
+                ]
+              },
+              "example": {
+                "email": "reya@example.com",
+                "password": "correcthorse123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "An account with this email already exists"
+                }
+              }
+            }
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Log in with email + password",
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              },
+              "example": {
+                "email": "reya@example.com",
+                "password": "correcthorse123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Exchange a refresh token for a new token pair",
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refresh_token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "refresh_token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/role": {
+      "post": {
+        "summary": "Switch active role (client/creator); creates the profile row on first switch",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "client",
+                      "creator"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "active_role": {
+                      "type": "string"
+                    },
+                    "has_client_profile": {
+                      "type": "boolean"
+                    },
+                    "has_creator_profile": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "id": "5b1f7c2e-...",
+                  "email": "reya@example.com",
+                  "active_role": "creator",
+                  "has_client_profile": false,
+                  "has_creator_profile": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Discard tokens client-side (stateless JWTs — nothing to revoke server-side)",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/social-accounts/{platform}/oauth-url": {
+      "get": {
+        "summary": "Get the OAuth authorize URL for a platform",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "instagram"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "url": "https://api.instagram.com/oauth/authorize?..."
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/social-accounts/{platform}/callback": {
+      "post": {
+        "summary": "Exchange an OAuth code for follower/engagement stats; sets verified=true",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "instagram"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialAccount"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/social-accounts/{id}": {
+      "delete": {
+        "summary": "Unlink a social account",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8a2e..."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unlinked"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/creator-profile": {
+      "patch": {
+        "summary": "Update the creator profile",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "bio": {
+                    "type": "string"
+                  },
+                  "niches": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "starting_rate": {
+                    "type": "number"
+                  },
+                  "typical_turnaround_days": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "example": {
+                "name": "Reya Okafor",
+                "bio": "Beauty + product content.",
+                "niches": [
+                  "beauty",
+                  "product"
+                ],
+                "starting_rate": 250,
+                "typical_turnaround_days": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatorProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/creator-profile/portfolio": {
+      "post": {
+        "summary": "Add a portfolio item (media_url from a pre-signed S3 upload, not multipart)",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "media_url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "media_url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/creator-profile/portfolio/{id}": {
+      "delete": {
+        "summary": "Delete a portfolio item",
+        "tags": [
+          "Onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "..."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/briefs": {
+      "post": {
+        "summary": "Post a brief",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "reel",
+                      "ugc",
+                      "youtube",
+                      "tiktok",
+                      "photo"
+                    ]
+                  },
+                  "niche": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "budget_min": {
+                    "type": "number"
+                  },
+                  "budget_max": {
+                    "type": "number"
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "reference_images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "title",
+                  "format",
+                  "niche",
+                  "description",
+                  "budget_min",
+                  "budget_max",
+                  "deadline"
+                ]
+              },
+              "example": {
+                "title": "15s product reel for launch",
+                "format": "reel",
+                "niche": "beauty",
+                "description": "Handheld, natural light, 15s max.",
+                "budget_min": 300,
+                "budget_max": 600,
+                "deadline": "2026-09-02",
+                "reference_images": [
+                  "https://vouch-media.s3.amazonaws.com/refs/1.jpg"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brief"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "budget_max < budget_min",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "budget_max must be >= budget_min"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/briefs/mine": {
+      "get": {
+        "summary": "List the current client's briefs",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "open"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Brief"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/briefs/feed": {
+      "get": {
+        "summary": "Feed of open briefs for the current creator (defaults to their own niches)",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "niche",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "budget_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Brief"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/briefs/{id}": {
+      "get": {
+        "summary": "Get a brief",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "b7e1..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brief"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit a brief (owner only, only while open)",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "b7e1..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Any subset of the POST /briefs fields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brief"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/briefs/{id}/cancel": {
+      "post": {
+        "summary": "Cancel a brief (owner only, only if no bid accepted yet)",
+        "tags": [
+          "Briefs"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "b7e1..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brief"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/briefs/{id}/bids": {
+      "post": {
+        "summary": "Submit a bid on a brief",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "b7e1..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "delivery_days": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "price",
+                  "delivery_days"
+                ]
+              },
+              "example": {
+                "price": 450,
+                "delivery_days": 3,
+                "note": "Can start Monday."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Brief not open, or you already have a pending bid on it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You already have a bid on this brief — update or withdraw it instead"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List bids on a brief (owner only)",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "b7e1..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Bid"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "creator": {
+                            "type": "object",
+                            "properties": {
+                              "user_id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "example": "5b1f7c2e-3a4b-4c1d-9e2f-1a2b3c4d5e6f"
+                              },
+                              "avatar_url": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "avg_rating": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/bids/mine": {
+      "get": {
+        "summary": "List the current creator's bids (each with its parent brief)",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Bid"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "brief": {
+                            "$ref": "#/components/schemas/Brief"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/bids/{id}": {
+      "patch": {
+        "summary": "Update a bid (owner only, only while pending) — added, not in the original spec",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "f2c9..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "delivery_days": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Withdraw a bid (owner only, only while pending) — added, not in the original spec",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "f2c9..."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Withdrawn"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/bids/{id}/accept": {
+      "post": {
+        "summary": "Accept a bid — declines every other pending bid on the brief, creates the Deal",
+        "tags": [
+          "Bids"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "f2c9..."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/creators/search": {
+      "get": {
+        "summary": "Search the creator directory",
+        "tags": [
+          "Creators"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "niche",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "followers_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "followers_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "budget_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/CreatorProfile"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "social_accounts": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/SocialAccount"
+                            }
+                          },
+                          "is_verified": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/creators/{id}": {
+      "get": {
+        "summary": "Get a creator's public profile",
+        "tags": [
+          "Creators"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "5b1f7c2e-..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/CreatorProfile"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "social_accounts": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SocialAccount"
+                          }
+                        },
+                        "portfolio_items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PortfolioItem"
+                          }
+                        },
+                        "is_verified": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/offers": {
+      "post": {
+        "summary": "Send a direct offer to a creator",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "creator_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "brief_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "reel",
+                      "ugc",
+                      "youtube",
+                      "tiktok",
+                      "photo"
+                    ]
+                  },
+                  "turnaround_days": {
+                    "type": "integer"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "creator_id",
+                  "price",
+                  "format",
+                  "turnaround_days"
+                ]
+              },
+              "example": {
+                "creator_id": "5b1f7c2e-...",
+                "price": 520,
+                "format": "reel",
+                "turnaround_days": 3,
+                "message": "Loved your spring campaign."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectOffer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/offers/mine": {
+      "get": {
+        "summary": "List offers you've sent or received",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DirectOffer"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/offers/{id}": {
+      "get": {
+        "summary": "Get an offer, including its full revision history",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "9f0e..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectOffer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/offers/{id}/counter": {
+      "post": {
+        "summary": "Counter an offer (either side)",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "9f0e..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "turnaround_days": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "price",
+                  "turnaround_days"
+                ]
+              },
+              "example": {
+                "price": 600,
+                "turnaround_days": 4,
+                "note": "Covers a second usage license."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectOffer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/offers/{id}/accept": {
+      "post": {
+        "summary": "Accept an offer — creates the Deal",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "9f0e..."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/offers/{id}/decline": {
+      "post": {
+        "summary": "Decline an offer",
+        "tags": [
+          "Offers"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "9f0e..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectOffer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/deals/mine": {
+      "get": {
+        "summary": "List your deals (as client or creator) — added, not in the original spec",
+        "tags": [
+          "Deals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Deal"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/deals/{id}": {
+      "get": {
+        "summary": "Get a deal — added, not in the original spec",
+        "tags": [
+          "Deals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/deals/{id}/cancel": {
+      "post": {
+        "summary": "Cancel a deal — only while negotiating/agreement_pending. Added: the state machine defines `cancelled` but no endpoint reached it",
+        "tags": [
+          "Deals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/deals/{id}/agreement": {
+      "post": {
+        "summary": "Set deal terms (client) — moves the deal negotiating -> agreement_pending",
+        "tags": [
+          "Agreement"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usage_rights": {
+                    "type": "string",
+                    "enum": [
+                      "organic",
+                      "paid_ads",
+                      "whitelisting"
+                    ]
+                  },
+                  "live_duration_days": {
+                    "type": "integer"
+                  },
+                  "approval_required": {
+                    "type": "boolean"
+                  },
+                  "min_views": {
+                    "type": "integer",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "usage_rights",
+                  "live_duration_days",
+                  "approval_required"
+                ]
+              },
+              "example": {
+                "usage_rights": "paid_ads",
+                "live_duration_days": 60,
+                "approval_required": true,
+                "min_views": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agreement"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "get": {
+        "summary": "Get the deal's agreement terms",
+        "tags": [
+          "Agreement"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agreement"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/deals/{id}/agreement/consent": {
+      "post": {
+        "summary": "Creator consents to the terms — the hard gate; consented must be literal boolean true",
+        "tags": [
+          "Agreement"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "consented": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "consented"
+                ]
+              },
+              "example": {
+                "consented": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agreement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "consented wasn't literal true, or the client hasn't set terms yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "consented must be true"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/deals/{id}/fund": {
+      "post": {
+        "summary": "Fund escrow (client) — real Stripe manual-capture PaymentIntent before any DB write",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payment_method_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "payment_method_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Escrow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Creator hasn't consented yet (rule 1, re-checked here)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Creator has not consented to the agreement yet"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/deals/{id}/mark-live": {
+      "post": {
+        "summary": "Mark content live (creator) — starts the payout countdown",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "live_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Escrow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/internal/escrow/release-due-payouts": {
+      "post": {
+        "summary": "Cron-only: release payouts for escrows past their live-duration window",
+        "description": "Not JWT-gated. Requires header `X-Internal-Secret: <INTERNAL_API_SECRET>`.",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "internalSecret": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDuePayoutsSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/wrong X-Internal-Secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid internal secret"
+                }
+              }
+            }
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/transactions/mine": {
+      "get": {
+        "summary": "List your transactions",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Transaction"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/payment-methods": {
+      "post": {
+        "summary": "Attach a card (client confirms a Stripe SetupIntent first; card data never touches this API)",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payment_method_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "payment_method_id"
+                ]
+              },
+              "example": {
+                "payment_method_id": "pm_1P..."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethod"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      },
+      "get": {
+        "summary": "List saved payment methods",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentMethod"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/payout-methods": {
+      "post": {
+        "summary": "Start Stripe Connect Express onboarding",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schedule": {
+                    "type": "string",
+                    "enum": [
+                      "weekly",
+                      "biweekly"
+                    ]
+                  }
+                }
+              },
+              "example": {
+                "schedule": "weekly"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payout_method": {
+                      "$ref": "#/components/schemas/PayoutMethod"
+                    },
+                    "onboarding_url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      },
+      "get": {
+        "summary": "List payout methods",
+        "tags": [
+          "Escrow & Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PayoutMethod"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/deals/{id}/drafts": {
+      "post": {
+        "summary": "Submit a draft (creator) — file_url from a pre-signed S3 upload",
+        "tags": [
+          "Drafts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file_url": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file_url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "get": {
+        "summary": "List a deal's draft submission history",
+        "tags": [
+          "Drafts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Draft"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/drafts/{id}/approve": {
+      "post": {
+        "summary": "Approve a draft (client)",
+        "tags": [
+          "Drafts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "c9d1..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/drafts/{id}/request-changes": {
+      "post": {
+        "summary": "Request changes on a draft (client) — never touches the Agreement (rule 5)",
+        "tags": [
+          "Drafts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "c9d1..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feedback": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "feedback"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/deals/{id}/review": {
+      "post": {
+        "summary": "Leave a review — only once Deal.status = completed (rule 7)",
+        "tags": [
+          "Reviews"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "d41a..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rating"
+                ]
+              },
+              "example": {
+                "rating": 5,
+                "tags": [
+                  "great_communication",
+                  "on_time"
+                ],
+                "comment": "Would book again."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/users/{id}/reviews": {
+      "get": {
+        "summary": "Get a user's aggregate rating + review list",
+        "tags": [
+          "Reviews"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "5b1f7c2e-..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewsForUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/threads": {
+      "get": {
+        "summary": "List your message threads",
+        "tags": [
+          "Messaging"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Thread"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/threads/{id}/messages": {
+      "get": {
+        "summary": "List a thread's messages (cursor-paginated, newest first)",
+        "tags": [
+          "Messaging"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "t1a2..."
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Message id cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Message"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "summary": "Send a message (text and/or attachment_url — at least one required)",
+        "tags": [
+          "Messaging"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "t1a2..."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "attachment_url": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "text": "Sure, send me the terms"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "List notifications",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unread_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "example": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "summary": "Mark a notification read",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "..."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/push-tokens": {
+      "post": {
+        "summary": "Register a device push token (FCM/APNs)",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "platform": {
+                    "type": "string"
+                  },
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "platform",
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushToken"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "summary": "Get the current user",
+        "tags": [
+          "Settings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update avatar_url and/or notification_prefs",
+        "tags": [
+          "Settings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "avatar_url": {
+                    "type": "string"
+                  },
+                  "notification_prefs": {
+                    "type": "object"
+                  }
+                }
+              },
+              "example": {
+                "avatar_url": "https://...",
+                "notification_prefs": {
+                  "push": true,
+                  "email_digest": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}

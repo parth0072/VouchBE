@@ -3,6 +3,19 @@ import { createPool, type TypeCastField, type PoolOptions } from "mysql2";
 import { env } from "../config/env";
 import type { Database } from "./types";
 
+// decodeURIComponent throws on a raw "%" that isn't a valid percent-escape —
+// a real MySQL password containing one crashed the app at startup on a live
+// deploy. Most people pasting a password into a connection string don't think
+// to percent-encode it first, so treat "isn't validly encoded" as "wasn't
+// encoded" and use the raw value, instead of demanding correct encoding.
+function decodeUriComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 // DATABASE_URL is parsed manually (not passed as a raw URI string to mysql2)
 // so a `?socket=/path/to/mysql.sock` query param is handled explicitly and
 // reliably — production (cPanel/CloudLinux) only accepts local connections
@@ -11,8 +24,8 @@ function parseConnectionConfig(databaseUrl: string): PoolOptions {
   const url = new URL(databaseUrl);
   const socketPath = url.searchParams.get("socket");
   const database = url.pathname.replace(/^\//, "");
-  const user = decodeURIComponent(url.username);
-  const password = url.password ? decodeURIComponent(url.password) : undefined;
+  const user = decodeUriComponentSafe(url.username);
+  const password = url.password ? decodeUriComponentSafe(url.password) : undefined;
 
   if (socketPath) {
     return { socketPath, user, password, database };

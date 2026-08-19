@@ -51,11 +51,11 @@ npm run build
 cat <<'EOF'
 
 Done. Still needed before this actually serves traffic:
-  1. Set DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET — via cPanel's
-     Node.js App > Environment Variables, or a .env file in the app root.
-  2. npx prisma migrate deploy      (creates the tables on the real DB — if
-     this one crashes the same way, say so; it uses a different Prisma
-     binary than the one this script worked around)
+  1. In .env, set DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and
+     PRISMA_SCHEMA_ENGINE_BINARY=<app root>/deploy/schema-engine-rhel-openssl-3.0.x/schema-engine
+     (this last one matters — without it, `prisma migrate` auto-detects the
+     wrong engine on this host and hangs instead of erroring)
+  2. npx prisma migrate deploy      (creates the tables on the real DB)
   3. Confirm the Application startup file is dist/index.js, then Restart
      from cPanel's "Setup Node.js App" screen.
 EOF

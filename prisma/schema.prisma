@@ -17,7 +17,15 @@
 //     MySQL/Prisma can't FK-constrain elements inside a JSON array.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" keeps local dev working (auto-detects the dev machine's OS).
+  // "rhel-openssl-3.0.x" targets the cPanel/CloudLinux production host:
+  // x86_64, OpenSSL 3.x, no /etc/os-release (consistent with CloudLinux's
+  // CageFS jail) — cPanel hosts are overwhelmingly RHEL-family (CloudLinux
+  // itself is a RHEL derivative). Without this, npm install's postinstall
+  // (`prisma generate`) downloads whatever binary its own OS-detection
+  // guesses, which crashed with SIGABRT on that host.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

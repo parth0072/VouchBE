@@ -4,7 +4,7 @@ Generated from the implementation in `src/`, not from the spec — every respons
 
 ## Conventions
 
-- **Base URL**: `http://localhost:4000` in dev (`PORT` in `.env`).
+- **Base URL**: `http://localhost:4000` in dev (`PORT` in `.env`); `https://alphabyteinnovation.com/vouch` in production.
 - **Auth**: `Authorization: Bearer <access_token>` on every route marked 🔒 below. Tokens come from `/auth/signup`, `/auth/login`, or `/auth/refresh`.
 - **Wire format**: all request and response bodies are `snake_case`, regardless of the camelCase used internally (TS). Timestamps are ISO 8601 (`2026-08-19T14:32:00.000Z`). Decimal fields are strings at their column's real declared scale — money fields (`DECIMAL(10,2)`) as `"450.00"`, `avg_rating` (`DECIMAL(2,1)`) as `"4.9"` — mysql2 returns these pre-formatted correctly, no normalization needed.
 - **Errors** all follow one shape:

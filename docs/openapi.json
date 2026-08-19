@@ -11,6 +11,10 @@
   },
   "servers": [
     {
+      "url": "https://alphabyteinnovation.com/vouch",
+      "description": "Production"
+    },
+    {
       "url": "http://localhost:4000",
       "description": "Local dev"
     }

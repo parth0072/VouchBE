@@ -1,4 +1,5 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import type { Niche } from "../../lib/vocabularies";
 
@@ -11,21 +12,33 @@ export interface UpdateCreatorProfileInput {
 }
 
 export async function updateCreatorProfile(userId: string, input: UpdateCreatorProfileInput) {
-  const profile = await prisma.creatorProfile.findUnique({ where: { userId } });
+  const profile = await db.selectFrom("creatorProfiles").selectAll().where("userId", "=", userId).executeTakeFirst();
   if (!profile) {
     throw new ApiError(403, "Switch to the creator role before editing a creator profile");
   }
 
-  return prisma.creatorProfile.update({
-    where: { userId },
-    data: {
-      name: input.name,
-      bio: input.bio,
-      niches: input.niches,
-      startingRate: input.startingRate,
-      typicalTurnaroundDays: input.typicalTurnaroundDays,
-    },
-  });
+  // Kysely's .set() drops undefined-valued keys (same partial-update semantics
+  // Prisma had) — but an all-undefined input (empty PATCH body) would leave no
+  // SET clause at all, which MySQL rejects, so skip the write entirely then.
+  const hasUpdates = Object.values(input).some((v) => v !== undefined);
+  if (hasUpdates) {
+    await db
+      .updateTable("creatorProfiles")
+      .set({
+        name: input.name,
+        bio: input.bio,
+        // JSON.stringify(undefined) is itself undefined, so "not provided"
+        // still correctly skips the column — mysql2 needs an actual JSON
+        // string for a JSON column, not a raw JS array passed as a param.
+        niches: input.niches ? JSON.stringify(input.niches) : undefined,
+        startingRate: input.startingRate,
+        typicalTurnaroundDays: input.typicalTurnaroundDays,
+      })
+      .where("userId", "=", userId)
+      .execute();
+  }
+
+  return db.selectFrom("creatorProfiles").selectAll().where("userId", "=", userId).executeTakeFirstOrThrow();
 }
 
 // §5: portfolio images go through a pre-signed S3 URL for direct client upload,
@@ -34,22 +47,27 @@ export async function updateCreatorProfile(userId: string, input: UpdateCreatorP
 // through the API server"): mediaUrl is expected to already point at S3 by the
 // time this is called.
 export async function addPortfolioItem(userId: string, mediaUrl: string) {
-  const profile = await prisma.creatorProfile.findUnique({ where: { userId } });
+  const profile = await db.selectFrom("creatorProfiles").select("userId").where("userId", "=", userId).executeTakeFirst();
   if (!profile) {
     throw new ApiError(403, "Switch to the creator role before adding portfolio items");
   }
 
-  const count = await prisma.portfolioItem.count({ where: { creatorId: userId } });
+  const { count } = await db
+    .selectFrom("portfolioItems")
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .where("creatorId", "=", userId)
+    .executeTakeFirstOrThrow();
 
-  return prisma.portfolioItem.create({
-    data: { creatorId: userId, mediaUrl, sortOrder: count },
-  });
+  const id = newId();
+  await db.insertInto("portfolioItems").values({ id, creatorId: userId, mediaUrl, sortOrder: Number(count) }).execute();
+
+  return db.selectFrom("portfolioItems").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
 }
 
 export async function deletePortfolioItem(userId: string, itemId: string) {
-  const item = await prisma.portfolioItem.findUnique({ where: { id: itemId } });
+  const item = await db.selectFrom("portfolioItems").selectAll().where("id", "=", itemId).executeTakeFirst();
   if (!item) throw new ApiError(404, "Portfolio item not found");
   if (item.creatorId !== userId) throw new ApiError(403, "Not your portfolio item");
 
-  await prisma.portfolioItem.delete({ where: { id: itemId } });
+  await db.deleteFrom("portfolioItems").where("id", "=", itemId).execute();
 }

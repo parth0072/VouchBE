@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { Prisma } from "@prisma/client";
+import { NoResultError } from "kysely";
 import { ZodError } from "zod";
 import { ApiError } from "../lib/apiError";
 
@@ -13,13 +13,16 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return res.status(400).json({ error: "Validation failed", details: err.flatten() });
   }
 
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === "P2002") {
-      return res.status(409).json({ error: "Conflicts with an existing record" });
-    }
-    if (err.code === "P2025") {
-      return res.status(404).json({ error: "Not found" });
-    }
+  // executeTakeFirstOrThrow() on a missing row — Kysely's equivalent of
+  // Prisma's findUniqueOrThrow/update-on-missing-row failure.
+  if (err instanceof NoResultError) {
+    return res.status(404).json({ error: "Not found" });
+  }
+
+  // mysql2 doesn't export a distinct error class for this — duplicate-key
+  // violations surface as a plain Error with a `code` property.
+  if (typeof err === "object" && err !== null && "code" in err && err.code === "ER_DUP_ENTRY") {
+    return res.status(409).json({ error: "Conflicts with an existing record" });
   }
 
   console.error(err);

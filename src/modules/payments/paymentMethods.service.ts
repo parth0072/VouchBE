@@ -1,4 +1,5 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import { getStripe } from "../../lib/stripe";
 
@@ -15,19 +16,28 @@ export async function addPaymentMethod(clientId: string, stripePaymentMethodId: 
     throw new ApiError(400, "That payment method isn't a card");
   }
 
-  const existingCount = await prisma.paymentMethod.count({ where: { clientId } });
+  const { count } = await db
+    .selectFrom("paymentMethods")
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .where("clientId", "=", clientId)
+    .executeTakeFirstOrThrow();
 
-  return prisma.paymentMethod.create({
-    data: {
+  const id = newId();
+  await db
+    .insertInto("paymentMethods")
+    .values({
+      id,
       clientId,
       providerToken: pm.id,
       brand: pm.card.brand,
       last4: pm.card.last4,
-      isDefault: existingCount === 0,
-    },
-  });
+      isDefault: Number(count) === 0,
+    })
+    .execute();
+
+  return db.selectFrom("paymentMethods").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
 }
 
 export async function listPaymentMethods(clientId: string) {
-  return prisma.paymentMethod.findMany({ where: { clientId }, orderBy: { isDefault: "desc" } });
+  return db.selectFrom("paymentMethods").selectAll().where("clientId", "=", clientId).orderBy("isDefault", "desc").execute();
 }

@@ -1,5 +1,7 @@
-import type { SocialPlatform } from "@prisma/client";
+import type { SocialAccountsTable } from "../../db/types";
 import { ApiError } from "../../lib/apiError";
+
+type SocialPlatform = SocialAccountsTable["platform"];
 
 interface ProviderConfig {
   authUrl: string;

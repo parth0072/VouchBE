@@ -6,7 +6,7 @@ Generated from the implementation in `src/`, not from the spec — every respons
 
 - **Base URL**: `http://localhost:4000` in dev (`PORT` in `.env`).
 - **Auth**: `Authorization: Bearer <access_token>` on every route marked 🔒 below. Tokens come from `/auth/signup`, `/auth/login`, or `/auth/refresh`.
-- **Wire format**: all request and response bodies are `snake_case`, regardless of the camelCase used internally (Prisma/TS). Timestamps are ISO 8601 (`2026-08-19T14:32:00.000Z`). Every decimal field — money and `avg_rating` alike — is a string fixed at 2 places (`"450.00"`, `"4.90"`), normalized in `lib/caseConvert.ts` rather than left to decimal.js's default `toString()`, which silently drops trailing zeros regardless of the column's declared scale (a live test against a real database caught a `DECIMAL(10,2)` column round-tripping as `"250"` before this was fixed).
+- **Wire format**: all request and response bodies are `snake_case`, regardless of the camelCase used internally (TS). Timestamps are ISO 8601 (`2026-08-19T14:32:00.000Z`). Decimal fields are strings at their column's real declared scale — money fields (`DECIMAL(10,2)`) as `"450.00"`, `avg_rating` (`DECIMAL(2,1)`) as `"4.9"` — mysql2 returns these pre-formatted correctly, no normalization needed.
 - **Errors** all follow one shape:
   ```json
   { "error": "message" }
@@ -48,7 +48,7 @@ Password path only — OAuth is real code gated behind config, see below.
 **Errors**: `401` invalid/expired.
 
 ### `POST /auth/role` 🔒
-Switches which side of the app you're in; creates the profile row on first switch (see the nullability note in `schema.prisma` — a fresh `CreatorProfile`/`ClientProfile` has everything but `user_id` null until onboarding fills it in).
+Switches which side of the app you're in; creates the profile row on first switch (see the nullability note in `db/types.ts` — a fresh `CreatorProfile`/`ClientProfile` has everything but `user_id` null until onboarding fills it in).
 
 **Request** `{ "role": "creator" }`
 **Response `200`**
@@ -114,7 +114,7 @@ No server-side session to invalidate — no refresh-token table exists in §2's 
   "starting_rate": "250.00",
   "typical_turnaround_days": 3,
   "avatar_url": null,
-  "avg_rating": "0.00",
+  "avg_rating": "0.0",
   "review_count": 0
 }
 ```
@@ -219,7 +219,7 @@ Defaults to the creator's own `niches` when `?niche=` is omitted. Same shape as 
     "id": "f2c9...", "brief_id": "b7e1...", "creator_id": "5b1f7c2e-...",
     "price": "450.00", "delivery_days": 3, "note": "Can start Monday.",
     "status": "pending", "created_at": "2026-08-19T14:32:00.000Z",
-    "creator": { "user_id": "5b1f7c2e-...", "avatar_url": null, "avg_rating": "4.90" }
+    "creator": { "user_id": "5b1f7c2e-...", "avatar_url": null, "avg_rating": "4.9" }
   }
 ]
 ```
@@ -260,7 +260,7 @@ Declines every other pending bid on the brief, moves the brief to `in_progress`,
   {
     "user_id": "5b1f7c2e-...", "name": "Reya Okafor", "bio": "...",
     "niches": ["beauty", "product"], "starting_rate": "250.00", "typical_turnaround_days": 3,
-    "avatar_url": null, "avg_rating": "4.90", "review_count": 38,
+    "avatar_url": null, "avg_rating": "4.9", "review_count": 38,
     "social_accounts": [
       { "id": "...", "creator_id": "5b1f7c2e-...", "platform": "instagram", "handle": "reya.creates", "follower_count": 142000, "engagement_rate": "4.20", "verified": true, "oauth_token_ref": "...", "last_synced_at": "..." }
     ],
@@ -502,7 +502,7 @@ If the reviewee has a `CreatorProfile`, its `avg_rating`/`review_count` are reco
 **Response `200`**
 ```json
 {
-  "avg_rating": "4.90",
+  "avg_rating": "4.9",
   "review_count": 38,
   "reviews": [
     { "id": "...", "deal_id": "...", "reviewer_id": "...", "reviewee_id": "5b1f7c2e-...", "rating": 5, "tags": ["great_communication"], "comment": "...", "created_at": "..." }
@@ -526,7 +526,7 @@ If the reviewee has a `CreatorProfile`, its `avg_rating`/`review_count` are reco
   "creator_profile": { "user_id": "5b1f7c2e-...", "name": "Reya Okafor", "...": "full CreatorProfile row" }
 }
 ```
-Never includes `password_hash` — it's excluded at the Prisma query level, not stripped after the fact.
+Never includes `password_hash` — it's excluded via an explicit column `select`, not stripped after the fact.
 
 ### `PATCH /me`
 **Request** `{ "avatar_url": "https://...", "notification_prefs": { "push": true, "email_digest": false } }`

@@ -1,9 +1,17 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import { newId } from "../../lib/id";
 
 export async function registerPushToken(userId: string, platform: string, token: string) {
-  return prisma.pushToken.upsert({
-    where: { userId_token: { userId, token } },
-    create: { userId, platform, token },
-    update: { platform },
-  });
+  await db
+    .insertInto("pushTokens")
+    .values({ id: newId(), userId, platform, token })
+    .onDuplicateKeyUpdate({ platform })
+    .execute();
+
+  return db
+    .selectFrom("pushTokens")
+    .selectAll()
+    .where("userId", "=", userId)
+    .where("token", "=", token)
+    .executeTakeFirstOrThrow();
 }

@@ -1,3 +1,10 @@
+-- Full DB schema — run once against a fresh MySQL database to create every
+-- table. Source of truth is db/types.ts (the Kysely Database interface, kept
+-- in sync with this file by hand); this .sql has no active tooling behind it
+-- (originally Prisma-generated, before the app moved to Kysely+mysql2 — see
+-- README for why), it's just the plain DDL, preserved because it's the exact
+-- schema already applied to the real databases (local dev + production).
+
 -- CreateTable
 CREATE TABLE `users` (
     `id` CHAR(36) NOT NULL,

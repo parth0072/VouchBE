@@ -1,7 +1,10 @@
-import type { PayoutSchedule } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import type { PayoutMethodsTable } from "../../db/types";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import { getStripe } from "../../lib/stripe";
+
+type PayoutSchedule = PayoutMethodsTable["schedule"];
 
 // "provider-specific onboarding" (§3.8) — for stripe_connect that's an Express
 // account plus a hosted onboarding link; the creator finishes setup on Stripe's
@@ -19,18 +22,19 @@ export async function createPayoutMethod(creatorId: string, schedule: PayoutSche
 
   const stripe = getStripe();
 
-  let payoutMethod = await prisma.payoutMethod.findFirst({ where: { creatorId } });
+  let payoutMethod = await db.selectFrom("payoutMethods").selectAll().where("creatorId", "=", creatorId).executeTakeFirst();
 
   if (!payoutMethod) {
     const account = await stripe.accounts.create({ type: "express" });
-    payoutMethod = await prisma.payoutMethod.create({
-      data: { creatorId, provider: "stripe_connect", accountRef: account.id, schedule },
-    });
+    const id = newId();
+    await db
+      .insertInto("payoutMethods")
+      .values({ id, creatorId, provider: "stripe_connect", accountRef: account.id, schedule })
+      .execute();
+    payoutMethod = await db.selectFrom("payoutMethods").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
   } else {
-    payoutMethod = await prisma.payoutMethod.update({
-      where: { id: payoutMethod.id },
-      data: { schedule },
-    });
+    await db.updateTable("payoutMethods").set({ schedule }).where("id", "=", payoutMethod.id).execute();
+    payoutMethod = await db.selectFrom("payoutMethods").selectAll().where("id", "=", payoutMethod.id).executeTakeFirstOrThrow();
   }
 
   const accountLink = await stripe.accountLinks.create({
@@ -44,5 +48,5 @@ export async function createPayoutMethod(creatorId: string, schedule: PayoutSche
 }
 
 export async function listPayoutMethods(creatorId: string) {
-  return prisma.payoutMethod.findMany({ where: { creatorId } });
+  return db.selectFrom("payoutMethods").selectAll().where("creatorId", "=", creatorId).execute();
 }

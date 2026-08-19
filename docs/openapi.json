@@ -151,7 +151,7 @@
           "starting_rate": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros",
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed",
             "nullable": true
           },
           "typical_turnaround_days": {
@@ -165,7 +165,7 @@
           },
           "avg_rating": {
             "type": "string",
-            "example": "4.90"
+            "example": "4.9"
           },
           "review_count": {
             "type": "integer",
@@ -363,12 +363,12 @@
           "budget_min": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "budget_max": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "deadline": {
             "type": "string",
@@ -428,7 +428,7 @@
           "price": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "delivery_days": {
             "type": "integer",
@@ -476,7 +476,7 @@
           "price": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "turnaround_days": {
             "type": "integer"
@@ -519,7 +519,7 @@
           "price": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "format": {
             "type": "string",
@@ -600,7 +600,7 @@
           "agreed_price": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "status": {
             "type": "string",
@@ -754,7 +754,7 @@
           "amount": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "funded_at": {
             "type": "string",
@@ -880,7 +880,7 @@
           "amount": {
             "type": "string",
             "example": "450.00",
-            "description": "Decimal string normalized to 2 places (lib/caseConvert.ts) regardless of the value's own trailing zeros"
+            "description": "Decimal string at the column's real declared scale (DECIMAL(10,2)) — mysql2 returns it pre-formatted, no normalization needed"
           },
           "status": {
             "type": "string",
@@ -1126,7 +1126,7 @@
           "avg_rating": {
             "type": "string",
             "nullable": true,
-            "example": "4.90"
+            "example": "4.9"
           },
           "review_count": {
             "type": "integer",

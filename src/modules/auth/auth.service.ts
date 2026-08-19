@@ -1,8 +1,10 @@
 import bcrypt from "bcryptjs";
-import type { Role } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../lib/jwt";
+
+type Role = "client" | "creator";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -19,25 +21,24 @@ function issueTokens(userId: string): TokenPair {
 }
 
 export async function signupWithPassword(email: string, password: string) {
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await db.selectFrom("users").select("id").where("email", "=", email).executeTakeFirst();
   if (existing) {
     throw new ApiError(409, "An account with this email already exists");
   }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const now = new Date();
 
   // §2.1 doesn't say what active_role starts as — role select (screen 01) is the
   // very next step client-side, immediately after signup, via POST /auth/role.
   // `client` here is just a non-null placeholder until that call lands.
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      activeRole: "client",
-    },
-  });
+  const userId = newId();
+  await db
+    .insertInto("users")
+    .values({ id: userId, email, passwordHash, activeRole: "client", updatedAt: now })
+    .execute();
 
-  return issueTokens(user.id);
+  return issueTokens(userId);
 }
 
 // The doc's `{oauth_provider, oauth_token}` signup path requires verifying the
@@ -50,7 +51,7 @@ export async function signupWithOAuth(_provider: string, _token: string): Promis
 }
 
 export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await db.selectFrom("users").selectAll().where("email", "=", email).executeTakeFirst();
   if (!user || !user.passwordHash) {
     throw new ApiError(401, "Invalid email or password");
   }
@@ -71,7 +72,7 @@ export async function refresh(refreshToken: string) {
     throw new ApiError(401, "Invalid or expired refresh token");
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  const user = await db.selectFrom("users").select("id").where("id", "=", payload.sub).executeTakeFirst();
   if (!user) {
     throw new ApiError(401, "Invalid or expired refresh token");
   }
@@ -81,32 +82,33 @@ export async function refresh(refreshToken: string) {
 
 // "creates the missing profile row on first switch" (§3.1). Profile fields that
 // onboarding hasn't collected yet stay null — see the nullability note on
-// ClientProfile/CreatorProfile in schema.prisma.
+// ClientProfile/CreatorProfile in db/types.ts.
 export async function switchRole(userId: string, role: Role) {
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+  return db.transaction().execute(async (trx) => {
+    const user = await trx.selectFrom("users").selectAll().where("id", "=", userId).executeTakeFirstOrThrow();
 
     if (role === "client" && !user.hasClientProfile) {
-      await tx.clientProfile.create({ data: { userId } });
+      await trx.insertInto("clientProfiles").values({ userId }).execute();
     }
     if (role === "creator" && !user.hasCreatorProfile) {
-      await tx.creatorProfile.create({ data: { userId } });
+      await trx.insertInto("creatorProfiles").values({ userId }).execute();
     }
 
-    return tx.user.update({
-      where: { id: userId },
-      data: {
+    await trx
+      .updateTable("users")
+      .set({
         activeRole: role,
         hasClientProfile: role === "client" ? true : user.hasClientProfile,
         hasCreatorProfile: role === "creator" ? true : user.hasCreatorProfile,
-      },
-      select: {
-        id: true,
-        email: true,
-        activeRole: true,
-        hasClientProfile: true,
-        hasCreatorProfile: true,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where("id", "=", userId)
+      .execute();
+
+    return trx
+      .selectFrom("users")
+      .select(["id", "email", "activeRole", "hasClientProfile", "hasCreatorProfile"])
+      .where("id", "=", userId)
+      .executeTakeFirstOrThrow();
   });
 }

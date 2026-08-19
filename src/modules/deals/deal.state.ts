@@ -1,9 +1,10 @@
-import type { Deal, DealStatus, Prisma } from "@prisma/client";
+import type { Transaction } from "kysely";
+import type { Database, DealStatus } from "../../db/types";
 import { ApiError } from "../../lib/apiError";
 
-// Single authoritative place for Deal.status writes — see the DealStatus enum
-// comment in schema.prisma. Every other module imports transitionDeal() instead
-// of writing `status: X` directly in a Prisma update.
+// Single authoritative place for Deal.status writes — see the DealStatus type
+// comment in db/types.ts. Every other module imports transitionDeal() instead
+// of writing `status: X` directly in an update.
 
 export type DealEvent =
   | "SET_AGREEMENT"
@@ -32,17 +33,17 @@ const TRANSITIONS: Record<DealEvent, { from: DealStatus[]; to: DealStatus }> = {
   CANCEL: { from: ["negotiating", "agreement_pending"], to: "cancelled" },
 };
 
-export async function transitionDeal(
-  tx: Prisma.TransactionClient,
-  dealId: string,
-  event: DealEvent,
-): Promise<Deal> {
-  const deal = await tx.deal.findUniqueOrThrow({ where: { id: dealId } });
+// MySQL has no RETURNING clause, so an update is a write followed by a read —
+// unlike Prisma, which made that look like one call.
+export async function transitionDeal(trx: Transaction<Database>, dealId: string, event: DealEvent) {
+  const deal = await trx.selectFrom("deals").selectAll().where("id", "=", dealId).executeTakeFirstOrThrow();
   const rule = TRANSITIONS[event];
 
   if (!rule.from.includes(deal.status)) {
     throw new ApiError(409, `Cannot apply ${event} to a deal in status "${deal.status}"`);
   }
 
-  return tx.deal.update({ where: { id: dealId }, data: { status: rule.to } });
+  await trx.updateTable("deals").set({ status: rule.to, updatedAt: new Date() }).where("id", "=", dealId).execute();
+
+  return trx.selectFrom("deals").selectAll().where("id", "=", dealId).executeTakeFirstOrThrow();
 }

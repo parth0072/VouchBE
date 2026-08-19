@@ -1,23 +1,30 @@
-import type { SocialPlatform } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import type { SocialAccountsTable } from "../../db/types";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import { buildOAuthUrl, exchangeCodeForStats } from "./oauthProviders";
+
+type SocialPlatform = SocialAccountsTable["platform"];
 
 export function getOAuthUrl(platform: SocialPlatform) {
   return buildOAuthUrl(platform);
 }
 
 export async function handleCallback(userId: string, platform: SocialPlatform, code: string) {
-  const profile = await prisma.creatorProfile.findUnique({ where: { userId } });
+  const profile = await db.selectFrom("creatorProfiles").select("userId").where("userId", "=", userId).executeTakeFirst();
   if (!profile) {
     throw new ApiError(403, "Switch to the creator role before linking a social account");
   }
 
   const stats = await exchangeCodeForStats(platform, code);
+  const lastSyncedAt = new Date();
 
-  return prisma.socialAccount.upsert({
-    where: { creatorId_platform: { creatorId: userId, platform } },
-    create: {
+  // MySQL upsert via ON DUPLICATE KEY UPDATE, keyed on the UNIQUE(creator_id,
+  // platform) constraint — no RETURNING, so a separate select follows.
+  await db
+    .insertInto("socialAccounts")
+    .values({
+      id: newId(),
       creatorId: userId,
       platform,
       handle: stats.handle,
@@ -25,23 +32,30 @@ export async function handleCallback(userId: string, platform: SocialPlatform, c
       engagementRate: stats.engagementRate,
       verified: true,
       oauthTokenRef: stats.oauthTokenRef,
-      lastSyncedAt: new Date(),
-    },
-    update: {
+      lastSyncedAt,
+    })
+    .onDuplicateKeyUpdate({
       handle: stats.handle,
       followerCount: stats.followerCount,
       engagementRate: stats.engagementRate,
       verified: true,
       oauthTokenRef: stats.oauthTokenRef,
-      lastSyncedAt: new Date(),
-    },
-  });
+      lastSyncedAt,
+    })
+    .execute();
+
+  return db
+    .selectFrom("socialAccounts")
+    .selectAll()
+    .where("creatorId", "=", userId)
+    .where("platform", "=", platform)
+    .executeTakeFirstOrThrow();
 }
 
 export async function deleteSocialAccount(userId: string, socialAccountId: string) {
-  const account = await prisma.socialAccount.findUnique({ where: { id: socialAccountId } });
+  const account = await db.selectFrom("socialAccounts").selectAll().where("id", "=", socialAccountId).executeTakeFirst();
   if (!account) throw new ApiError(404, "Social account not found");
   if (account.creatorId !== userId) throw new ApiError(403, "Not your social account");
 
-  await prisma.socialAccount.delete({ where: { id: socialAccountId } });
+  await db.deleteFrom("socialAccounts").where("id", "=", socialAccountId).execute();
 }

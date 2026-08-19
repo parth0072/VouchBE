@@ -1,5 +1,6 @@
-import type { BriefFormat } from "@prisma/client";
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
+import type { BriefFormat } from "../../db/types";
+import { newId } from "../../lib/id";
 import { ApiError } from "../../lib/apiError";
 import { getOrCreateThread } from "../messaging/threads.service";
 import { createNotification } from "../notifications/notifications.service";
@@ -14,35 +15,42 @@ export interface CreateOfferInput {
 }
 
 export async function createOffer(clientId: string, input: CreateOfferInput) {
-  const creator = await prisma.creatorProfile.findUnique({ where: { userId: input.creatorId } });
+  const creator = await db.selectFrom("creatorProfiles").select("userId").where("userId", "=", input.creatorId).executeTakeFirst();
   if (!creator) throw new ApiError(404, "Creator not found");
 
   if (input.briefId) {
-    const brief = await prisma.brief.findUnique({ where: { id: input.briefId } });
+    const brief = await db.selectFrom("briefs").select(["id", "clientId"]).where("id", "=", input.briefId).executeTakeFirst();
     if (!brief) throw new ApiError(404, "Brief not found");
     if (brief.clientId !== clientId) throw new ApiError(403, "Not your brief");
   }
 
   await getOrCreateThread(clientId, input.creatorId, { briefId: input.briefId });
 
-  return prisma.directOffer.create({
-    data: {
+  const id = newId();
+  await db
+    .insertInto("directOffers")
+    .values({
+      id,
       clientId,
       creatorId: input.creatorId,
-      briefId: input.briefId,
+      briefId: input.briefId ?? null,
       price: input.price,
       format: input.format,
       turnaroundDays: input.turnaroundDays,
       message: input.message,
-    },
-  });
+    })
+    .execute();
+
+  return db.selectFrom("directOffers").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
 }
 
 export async function listMyOffers(userId: string) {
-  return prisma.directOffer.findMany({
-    where: { OR: [{ clientId: userId }, { creatorId: userId }] },
-    orderBy: { createdAt: "desc" },
-  });
+  return db
+    .selectFrom("directOffers")
+    .selectAll()
+    .where((eb) => eb.or([eb("clientId", "=", userId), eb("creatorId", "=", userId)]))
+    .orderBy("createdAt", "desc")
+    .execute();
 }
 
 function assertParticipant(offer: { clientId: string; creatorId: string }, userId: string) {
@@ -52,17 +60,22 @@ function assertParticipant(offer: { clientId: string; creatorId: string }, userI
 }
 
 export async function getOfferById(offerId: string, userId: string) {
-  const offer = await prisma.directOffer.findUnique({
-    where: { id: offerId },
-    include: { revisions: { orderBy: { createdAt: "asc" } } },
-  });
+  const offer = await db.selectFrom("directOffers").selectAll().where("id", "=", offerId).executeTakeFirst();
   if (!offer) throw new ApiError(404, "Offer not found");
   assertParticipant(offer, userId);
-  return offer;
+
+  const revisions = await db
+    .selectFrom("offerRevisions")
+    .selectAll()
+    .where("offerId", "=", offerId)
+    .orderBy("createdAt", "asc")
+    .execute();
+
+  return { ...offer, revisions };
 }
 
 async function getActiveOfferForParticipant(offerId: string, userId: string) {
-  const offer = await prisma.directOffer.findUnique({ where: { id: offerId } });
+  const offer = await db.selectFrom("directOffers").selectAll().where("id", "=", offerId).executeTakeFirst();
   if (!offer) throw new ApiError(404, "Offer not found");
   assertParticipant(offer, userId);
   if (offer.status === "accepted" || offer.status === "declined") {
@@ -82,26 +95,26 @@ export async function counterOffer(offerId: string, userId: string, input: Count
   const proposedBy = offer.clientId === userId ? "client" : "creator";
   const recipientId = proposedBy === "client" ? offer.creatorId : offer.clientId;
 
-  const updated = await prisma.$transaction(async (tx) => {
-    await tx.offerRevision.create({
-      data: {
+  await db.transaction().execute(async (trx) => {
+    await trx
+      .insertInto("offerRevisions")
+      .values({
+        id: newId(),
         offerId,
         proposedBy,
         price: input.price,
         turnaroundDays: input.turnaroundDays,
         note: input.note,
-      },
-    });
+      })
+      .execute();
 
-    return tx.directOffer.update({
-      where: { id: offerId },
-      data: {
-        price: input.price,
-        turnaroundDays: input.turnaroundDays,
-        status: "countered",
-      },
-    });
+    await trx
+      .updateTable("directOffers")
+      .set({ price: input.price, turnaroundDays: input.turnaroundDays, status: "countered" })
+      .where("id", "=", offerId)
+      .execute();
   });
+  const updated = await db.selectFrom("directOffers").selectAll().where("id", "=", offerId).executeTakeFirstOrThrow();
 
   await createNotification(recipientId, "offer_countered", {
     offer_id: offerId,
@@ -114,20 +127,25 @@ export async function counterOffer(offerId: string, userId: string, input: Count
 export async function acceptOffer(offerId: string, userId: string) {
   const offer = await getActiveOfferForParticipant(offerId, userId);
 
-  const deal = await prisma.$transaction(async (tx) => {
-    await tx.directOffer.update({ where: { id: offerId }, data: { status: "accepted" } });
+  const dealId = newId();
+  await db.transaction().execute(async (trx) => {
+    await trx.updateTable("directOffers").set({ status: "accepted" }).where("id", "=", offerId).execute();
 
-    return tx.deal.create({
-      data: {
+    await trx
+      .insertInto("deals")
+      .values({
+        id: dealId,
         clientId: offer.clientId,
         creatorId: offer.creatorId,
         briefId: offer.briefId,
         offerId: offer.id,
         source: "direct_offer",
-        agreedPrice: offer.price,
-      },
-    });
+        agreedPrice: Number(offer.price),
+        updatedAt: new Date(),
+      })
+      .execute();
   });
+  const deal = await db.selectFrom("deals").selectAll().where("id", "=", dealId).executeTakeFirstOrThrow();
 
   // Thread already exists from createOffer() — this just attaches the new
   // deal id. Outside the transaction above: getOrCreateThread runs on its own
@@ -140,5 +158,6 @@ export async function acceptOffer(offerId: string, userId: string) {
 
 export async function declineOffer(offerId: string, userId: string) {
   await getActiveOfferForParticipant(offerId, userId);
-  return prisma.directOffer.update({ where: { id: offerId }, data: { status: "declined" } });
+  await db.updateTable("directOffers").set({ status: "declined" }).where("id", "=", offerId).execute();
+  return db.selectFrom("directOffers").selectAll().where("id", "=", offerId).executeTakeFirstOrThrow();
 }

@@ -1,8 +1,5 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
 
 export async function listMyTransactions(userId: string) {
-  return prisma.transaction.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
+  return db.selectFrom("transactions").selectAll().where("userId", "=", userId).orderBy("createdAt", "desc").execute();
 }

@@ -1,9 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
-import type { Role } from "@prisma/client";
-import { prisma } from "../lib/prisma";
+import { db } from "../db";
+import type { UsersTable } from "../db/types";
 import { verifyAccessToken } from "../lib/jwt";
 import { ApiError } from "../lib/apiError";
 import { asyncHandler } from "../lib/asyncHandler";
+
+type Role = UsersTable["activeRole"];
 
 export interface AuthenticatedUser {
   id: string;
@@ -36,10 +38,11 @@ export const requireAuth = asyncHandler(async (req: Request, _res: Response, nex
     throw new ApiError(401, "Invalid or expired token");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    select: { id: true, activeRole: true, hasClientProfile: true, hasCreatorProfile: true },
-  });
+  const user = await db
+    .selectFrom("users")
+    .select(["id", "activeRole", "hasClientProfile", "hasCreatorProfile"])
+    .where("id", "=", payload.sub)
+    .executeTakeFirst();
 
   if (!user) {
     throw new ApiError(401, "User not found");

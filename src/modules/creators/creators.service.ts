@@ -1,4 +1,4 @@
-import { prisma } from "../../lib/prisma";
+import { db } from "../../db";
 import { ApiError } from "../../lib/apiError";
 
 export interface SearchCreatorsFilters {
@@ -13,30 +13,46 @@ function withVerified<T extends { socialAccounts: { verified: boolean }[] }>(pro
   return { ...profile, isVerified: profile.socialAccounts.some((a) => a.verified) };
 }
 
-// niche/q matching happens in application code rather than as a Prisma `Json`
-// query filter: MySQL's JSON array-containment operators are newer/less portable
-// than the relational filters below, and can't be verified without a live DB in
-// front of me right now. Fine at v1 search volume; worth moving to the DB (or a
+async function attachSocialAccounts<T extends { userId: string }>(profiles: T[]) {
+  if (profiles.length === 0) return [];
+  const accounts = await db
+    .selectFrom("socialAccounts")
+    .selectAll()
+    .where("creatorId", "in", profiles.map((p) => p.userId))
+    .execute();
+  const accountsByCreator = new Map<string, typeof accounts>();
+  for (const account of accounts) {
+    const list = accountsByCreator.get(account.creatorId) ?? [];
+    list.push(account);
+    accountsByCreator.set(account.creatorId, list);
+  }
+  return profiles.map((profile) => ({ ...profile, socialAccounts: accountsByCreator.get(profile.userId) ?? [] }));
+}
+
+// niche/q matching happens in application code rather than as a MySQL `JSON`
+// query filter: array-containment operators are newer/less portable than the
+// relational filters below, and can't be verified without a live DB in front
+// of me right now. Fine at v1 search volume; worth moving to the DB (or a
 // normalized creator_niches join table) once it isn't.
 export async function searchCreators(filters: SearchCreatorsFilters) {
-  const candidates = await prisma.creatorProfile.findMany({
-    where: {
-      startingRate: filters.budgetMax ? { lte: filters.budgetMax } : undefined,
-      socialAccounts:
-        filters.followersMin !== undefined || filters.followersMax !== undefined
-          ? {
-              some: {
-                followerCount: {
-                  gte: filters.followersMin,
-                  lte: filters.followersMax,
-                },
-              },
-            }
-          : undefined,
-    },
-    include: { socialAccounts: true },
-    orderBy: { avgRating: "desc" },
-  });
+  const candidates = await db
+    .selectFrom("creatorProfiles")
+    .selectAll()
+    .$if(filters.budgetMax !== undefined, (qb) => qb.where("startingRate", "<=", String(filters.budgetMax)))
+    .$if(filters.followersMin !== undefined || filters.followersMax !== undefined, (qb) =>
+      qb.where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom("socialAccounts")
+            .select("id")
+            .whereRef("socialAccounts.creatorId", "=", "creatorProfiles.userId")
+            .$if(filters.followersMin !== undefined, (sub) => sub.where("followerCount", ">=", filters.followersMin as number))
+            .$if(filters.followersMax !== undefined, (sub) => sub.where("followerCount", "<=", filters.followersMax as number)),
+        ),
+      ),
+    )
+    .orderBy("avgRating", "desc")
+    .execute();
 
   const q = filters.q?.toLowerCase();
   const niche = filters.niche?.toLowerCase();
@@ -53,17 +69,21 @@ export async function searchCreators(filters: SearchCreatorsFilters) {
     return true;
   });
 
-  return filtered.map(withVerified);
+  const withAccounts = await attachSocialAccounts(filtered);
+  return withAccounts.map(withVerified);
 }
 
 export async function getCreatorById(creatorId: string) {
-  const profile = await prisma.creatorProfile.findUnique({
-    where: { userId: creatorId },
-    include: {
-      socialAccounts: true,
-      portfolioItems: { orderBy: { sortOrder: "asc" } },
-    },
-  });
+  const profile = await db.selectFrom("creatorProfiles").selectAll().where("userId", "=", creatorId).executeTakeFirst();
   if (!profile) throw new ApiError(404, "Creator not found");
-  return withVerified(profile);
+
+  const portfolioItems = await db
+    .selectFrom("portfolioItems")
+    .selectAll()
+    .where("creatorId", "=", creatorId)
+    .orderBy("sortOrder", "asc")
+    .execute();
+
+  const [withAccounts] = await attachSocialAccounts([profile]);
+  return withVerified({ ...withAccounts, portfolioItems });
 }

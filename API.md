@@ -6,7 +6,7 @@ Generated from the implementation in `src/`, not from the spec — every respons
 
 - **Base URL**: `http://localhost:4000` in dev (`PORT` in `.env`).
 - **Auth**: `Authorization: Bearer <access_token>` on every route marked 🔒 below. Tokens come from `/auth/signup`, `/auth/login`, or `/auth/refresh`.
-- **Wire format**: all request and response bodies are `snake_case`, regardless of the camelCase used internally (Prisma/TS). Timestamps are ISO 8601 (`2026-08-19T14:32:00.000Z`). Money fields are decimal strings at the column's fixed scale (`"450.00"`, not `450`), since they come straight off `DECIMAL(10,2)` columns.
+- **Wire format**: all request and response bodies are `snake_case`, regardless of the camelCase used internally (Prisma/TS). Timestamps are ISO 8601 (`2026-08-19T14:32:00.000Z`). Every decimal field — money and `avg_rating` alike — is a string fixed at 2 places (`"450.00"`, `"4.90"`), normalized in `lib/caseConvert.ts` rather than left to decimal.js's default `toString()`, which silently drops trailing zeros regardless of the column's declared scale (a live test against a real database caught a `DECIMAL(10,2)` column round-tripping as `"250"` before this was fixed).
 - **Errors** all follow one shape:
   ```json
   { "error": "message" }
@@ -114,7 +114,7 @@ No server-side session to invalidate — no refresh-token table exists in §2's 
   "starting_rate": "250.00",
   "typical_turnaround_days": 3,
   "avatar_url": null,
-  "avg_rating": "0.0",
+  "avg_rating": "0.00",
   "review_count": 0
 }
 ```
@@ -219,7 +219,7 @@ Defaults to the creator's own `niches` when `?niche=` is omitted. Same shape as 
     "id": "f2c9...", "brief_id": "b7e1...", "creator_id": "5b1f7c2e-...",
     "price": "450.00", "delivery_days": 3, "note": "Can start Monday.",
     "status": "pending", "created_at": "2026-08-19T14:32:00.000Z",
-    "creator": { "user_id": "5b1f7c2e-...", "avatar_url": null, "avg_rating": "4.9" }
+    "creator": { "user_id": "5b1f7c2e-...", "avatar_url": null, "avg_rating": "4.90" }
   }
 ]
 ```
@@ -260,7 +260,7 @@ Declines every other pending bid on the brief, moves the brief to `in_progress`,
   {
     "user_id": "5b1f7c2e-...", "name": "Reya Okafor", "bio": "...",
     "niches": ["beauty", "product"], "starting_rate": "250.00", "typical_turnaround_days": 3,
-    "avatar_url": null, "avg_rating": "4.9", "review_count": 38,
+    "avatar_url": null, "avg_rating": "4.90", "review_count": 38,
     "social_accounts": [
       { "id": "...", "creator_id": "5b1f7c2e-...", "platform": "instagram", "handle": "reya.creates", "follower_count": 142000, "engagement_rate": "4.20", "verified": true, "oauth_token_ref": "...", "last_synced_at": "..." }
     ],
@@ -502,7 +502,7 @@ If the reviewee has a `CreatorProfile`, its `avg_rating`/`review_count` are reco
 **Response `200`**
 ```json
 {
-  "avg_rating": "4.9",
+  "avg_rating": "4.90",
   "review_count": 38,
   "reviews": [
     { "id": "...", "deal_id": "...", "reviewer_id": "...", "reviewee_id": "5b1f7c2e-...", "rating": 5, "tags": ["great_communication"], "comment": "...", "created_at": "..." }

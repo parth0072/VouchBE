@@ -3,9 +3,25 @@ import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../lib/apiError";
 
 export async function getMe(userId: string) {
+  // Explicit select, not include: `omit` isn't in this Prisma Client's
+  // generated types (still preview-gated), and `include` alone would return
+  // every scalar column — passwordHash included. A live test caught exactly
+  // that leak before this was added.
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { clientProfile: true, creatorProfile: true },
+    select: {
+      id: true,
+      email: true,
+      oauthProviders: true,
+      activeRole: true,
+      hasClientProfile: true,
+      hasCreatorProfile: true,
+      notificationPrefs: true,
+      createdAt: true,
+      updatedAt: true,
+      clientProfile: true,
+      creatorProfile: true,
+    },
   });
   if (!user) throw new ApiError(404, "User not found");
   return user;

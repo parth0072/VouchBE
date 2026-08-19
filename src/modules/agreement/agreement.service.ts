@@ -8,7 +8,7 @@ export interface SetAgreementInput {
   usageRights: UsageRights;
   liveDurationDays: number;
   approvalRequired: boolean;
-  minViews?: number;
+  minViews?: number | null;
 }
 
 // §4 rule 1: consent is a hard gate. Setting terms only ever moves the deal

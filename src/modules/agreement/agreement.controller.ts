@@ -9,7 +9,11 @@ const setAgreementSchema = z.object({
   usage_rights: z.enum(USAGE_RIGHTS),
   live_duration_days: z.number().int().positive(),
   approval_required: z.boolean(),
-  min_views: z.number().int().positive().optional(),
+  // nullable(), not just optional(): Agreement.min_views is a nullable DB column
+  // (§2.3, "optional performance guarantee"), and a client explicitly clearing it
+  // sends `null`, not just omitting the key — a live test caught zod rejecting
+  // `{ min_views: null }` with a 400 before this was added.
+  min_views: z.number().int().positive().nullable().optional(),
 });
 
 export async function setAgreement(req: Request, res: Response) {

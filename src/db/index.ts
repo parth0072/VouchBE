@@ -20,6 +20,14 @@ function decodeUriComponentSafe(value: string): string {
 // so a `?socket=/path/to/mysql.sock` query param is handled explicitly and
 // reliably — production (cPanel/CloudLinux) only accepts local connections
 // via Unix socket, not TCP on 3306; see .env.example.
+//
+// A real password containing a URL-structural character (@, :, /, #, ?) makes
+// `new URL(...)` itself mis-parse the string — it'll extract some password-
+// shaped substring without throwing, just the wrong one, which surfaced on a
+// live deploy as MySQL rejecting a valid password ("Access denied ... using
+// password: YES"). No amount of decoding fixes a mis-split string, so
+// DB_USER/DB_PASSWORD/etc. (see below) exist as a way to skip URL parsing
+// entirely rather than requiring the password be correctly percent-encoded.
 function parseConnectionConfig(databaseUrl: string): PoolOptions {
   const url = new URL(databaseUrl);
   const socketPath = url.searchParams.get("socket");
@@ -39,6 +47,24 @@ function parseConnectionConfig(databaseUrl: string): PoolOptions {
   };
 }
 
+// Discrete DB_* vars take priority over DATABASE_URL when DB_USER is set —
+// no URL involved, so nothing about the password needs encoding at all. Set
+// these instead of DATABASE_URL if the password has an @, :, /, #, or ? in it.
+function discreteConnectionConfig(): PoolOptions | undefined {
+  const user = process.env.DB_USER;
+  if (!user) return undefined;
+
+  const base = { user, password: process.env.DB_PASSWORD, database: process.env.DB_NAME };
+  if (process.env.DB_SOCKET) {
+    return { ...base, socketPath: process.env.DB_SOCKET };
+  }
+  return {
+    ...base,
+    host: process.env.DB_HOST ?? "localhost",
+    port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+  };
+}
+
 // MySQL BOOLEAN is TINYINT(1) on the wire — cast it to a real JS boolean
 // explicitly rather than relying on driver defaults (mysql2 returns TINYINT
 // as a plain number otherwise, which would silently break every truthy check
@@ -52,7 +78,7 @@ function typeCast(field: TypeCastField, next: () => unknown) {
 }
 
 const pool = createPool({
-  ...parseConnectionConfig(env.DATABASE_URL),
+  ...(discreteConnectionConfig() ?? parseConnectionConfig(env.DATABASE_URL)),
   typeCast,
   supportBigNumbers: true,
   decimalNumbers: false, // DECIMAL columns stay fixed-scale strings ("450.00"), not floats

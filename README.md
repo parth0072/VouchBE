@@ -29,9 +29,9 @@ Other scripts: `npm run build` (compile to `dist/`), `npm start` (run the compil
 
 ## API docs
 
-- **Live Swagger UI**: https://parth0072.github.io/VouchBE/
+- **Live Swagger UI**: https://parth0072.github.io/VouchBE/ — production URL: `https://alphabyteinnovation.com/vouch`
 - **Prose reference** (same coverage, with explanations of every gap found vs. the spec): [API.md](API.md)
-- Source of truth for both: [`docs/openapi.json`](docs/openapi.json) (OpenAPI 3.0.3) and [`db/types.ts`](src/db/types.ts) (the actual Kysely schema)
+- `docs/openapi.json` (OpenAPI 3.0.3) is generated, not hand-edited — [`scripts/build-openapi.js`](scripts/build-openapi.js) is the actual source; after any route/schema change, run `npm run docs:build` and commit the regenerated JSON along with your change. [`db/types.ts`](src/db/types.ts) is the source of truth for the DB schema itself.
 
 ## Project structure
 

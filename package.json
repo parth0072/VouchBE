@@ -11,7 +11,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:build": "node scripts/build-openapi.js > docs/openapi.json"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

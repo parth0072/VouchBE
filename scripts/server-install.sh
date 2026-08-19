@@ -33,8 +33,12 @@ if [ ! -f "$PREBUILT/libquery_engine-rhel-openssl-3.0.x.so.node" ]; then
   exit 1
 fi
 
-echo "==> npm install --ignore-scripts"
-npm install --ignore-scripts
+echo "==> npm install --include=dev --ignore-scripts"
+# --include=dev: cPanel's "Production" Application mode sets NODE_ENV=production,
+# which makes plain `npm install` skip devDependencies — including typescript
+# and the prisma CLI, both needed just to build. Runtime doesn't need them;
+# `npm run build`'s output (dist/) is all Passenger actually runs.
+npm install --include=dev --ignore-scripts
 
 echo "==> Placing pre-built Prisma client (skips the crashing generate step)"
 mkdir -p node_modules/.prisma/client

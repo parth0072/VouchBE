@@ -26,31 +26,47 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (_req, res) => {
+// Everything lives on this router, then gets mounted under BASE_PATH — e.g.
+// cPanel's Setup Node.js App wizard put this deployment at a sub-URI
+// (alphabyteinnovation.com/vouch) without Passenger stripping the prefix
+// before forwarding, so the app has to know its own base path rather than
+// assuming it's always served from "/". Unset/empty BASE_PATH (the default —
+// true for local dev and most other hosts) mounts at the root exactly as
+// before.
+const apiRouter = express.Router();
+
+apiRouter.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/auth", authRouter);
-app.use("/deals", dealsRouter);
-app.use("/social-accounts", socialAccountsRouter);
-app.use("/creator-profile", creatorProfileRouter);
-app.use("/briefs", briefsRouter);
-app.use("/bids", bidsRouter);
-app.use("/creators", creatorsRouter);
-app.use("/offers", offersRouter);
-app.use("/payment-methods", paymentMethodsRouter);
-app.use("/payout-methods", payoutMethodsRouter);
-app.use("/transactions", transactionsRouter);
-app.use("/internal", internalRouter);
-app.use("/drafts", draftsRouter);
-app.use("/threads", threadsRouter);
-app.use("/notifications", notificationsRouter);
-app.use("/push-tokens", pushTokensRouter);
-app.use("/users", usersRouter);
-app.use("/me", meRouter);
+apiRouter.use("/auth", authRouter);
+apiRouter.use("/deals", dealsRouter);
+apiRouter.use("/social-accounts", socialAccountsRouter);
+apiRouter.use("/creator-profile", creatorProfileRouter);
+apiRouter.use("/briefs", briefsRouter);
+apiRouter.use("/bids", bidsRouter);
+apiRouter.use("/creators", creatorsRouter);
+apiRouter.use("/offers", offersRouter);
+apiRouter.use("/payment-methods", paymentMethodsRouter);
+apiRouter.use("/payout-methods", payoutMethodsRouter);
+apiRouter.use("/transactions", transactionsRouter);
+apiRouter.use("/internal", internalRouter);
+apiRouter.use("/drafts", draftsRouter);
+apiRouter.use("/threads", threadsRouter);
+apiRouter.use("/notifications", notificationsRouter);
+apiRouter.use("/push-tokens", pushTokensRouter);
+apiRouter.use("/users", usersRouter);
+apiRouter.use("/me", meRouter);
 
-app.use((_req, res) => {
+apiRouter.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+const basePath = process.env.BASE_PATH?.trim();
+if (basePath) {
+  app.use(basePath, apiRouter);
+} else {
+  app.use(apiRouter);
+}
 
 app.use(errorHandler);

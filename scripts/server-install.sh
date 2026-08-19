@@ -16,6 +16,14 @@
 
 set -euo pipefail
 
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm not found — the Node virtual environment isn't active in this" >&2
+  echo "terminal session (it doesn't persist across sessions, only this shell)." >&2
+  echo "Run this first, then re-run this script:" >&2
+  echo "  source ~/nodevenv/vouch/20/bin/activate" >&2
+  exit 1
+fi
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE"
 

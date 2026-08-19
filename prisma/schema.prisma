@@ -1,0 +1,546 @@
+// Transcribed from "Vouch - Backend Requirements.md" §2, adapted from the doc's
+// Postgres-flavored types to MySQL (the doc explicitly says to adjust to whatever
+// the team standardizes on):
+//   - uuid PK/FK      -> String @db.Char(36), app-generated via default(uuid())
+//   - jsonb           -> Json
+//   - text[]          -> Json array, EXCEPT where the doc's §2.5 vocabulary table
+//                        marks the list closed (no "extend as needed" note) — those
+//                        stay as native Prisma/MySQL enums (see BriefFormat,
+//                        SocialPlatform, UsageRights). Open vocabularies (creator
+//                        niches, review tags) and Notification.type (documented with
+//                        a trailing "..." — open-ended by design) are Json/String so
+//                        new values don't require a migration.
+//   - numeric(p,s)    -> Decimal @db.Decimal(p,s)
+//   - timestamptz     -> DateTime (MySQL has no tz-aware type; store/interpret as UTC)
+//   - Thread.participant_ids uuid[] (exactly 2, v1 is 1:1 only) -> two explicit FK
+//     columns (participantAId/participantBId) so referential integrity is enforced;
+//     MySQL/Prisma can't FK-constrain elements inside a JSON array.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- 2.1 User & profiles ----------
+
+enum Role {
+  client
+  creator
+}
+
+model User {
+  id                String   @id @default(uuid()) @db.Char(36)
+  email             String   @unique @db.VarChar(320)
+  passwordHash      String?  @map("password_hash")
+  oauthProviders    Json?    @map("oauth_providers")
+  activeRole        Role     @map("active_role")
+  hasClientProfile  Boolean  @default(false) @map("has_client_profile")
+  hasCreatorProfile Boolean  @default(false) @map("has_creator_profile")
+  // Not in §2.1's table — PATCH /me (§3.13) takes `notification_prefs` in its
+  // body (screen 26's push/email toggles) with nowhere documented to persist
+  // it. Shape is intentionally loose (Json, e.g. {push, email_digest}) rather
+  // than fixed columns, since screen 26 is the only place it's specified.
+  notificationPrefs Json?    @map("notification_prefs")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  clientProfile   ClientProfile?
+  creatorProfile  CreatorProfile?
+  sentMessages    Message[]       @relation("MessageSender")
+  notifications   Notification[]
+  reviewsWritten  Review[]        @relation("ReviewReviewer")
+  reviewsReceived Review[]        @relation("ReviewReviewee")
+  transactions    Transaction[]
+  threadsAsA      Thread[]        @relation("ThreadParticipantA")
+  threadsAsB      Thread[]        @relation("ThreadParticipantB")
+  pushTokens      PushToken[]
+
+  @@map("users")
+}
+
+// companyName is nullable despite §2.1 not marking it so: POST /auth/role (§3.1)
+// creates this row on first switch to `client`, before onboarding has collected
+// a company name.
+model ClientProfile {
+  userId      String  @id @map("user_id") @db.Char(36)
+  companyName String? @map("company_name")
+  avatarUrl   String? @map("avatar_url")
+
+  user           User            @relation(fields: [userId], references: [id])
+  briefs         Brief[]
+  directOffers   DirectOffer[]
+  deals          Deal[]
+  paymentMethods PaymentMethod[]
+
+  @@map("client_profiles")
+}
+
+// is_verified is deliberately NOT a column here — business rule §4.2: "derived,
+// not stored" (at least one SocialAccount.verified = true). Compute on read.
+//
+// `name` isn't in §2.1's table at all — a real gap, not just an adaptation.
+// Every screen that shows a creator (03, 09, 13, 15-19, 21...) shows a personal
+// name, and ClientProfile has company_name for the same purpose on the other
+// side, but CreatorProfile had no equivalent field to hold one. Added here,
+// mirroring company_name.
+//
+// niches/startingRate/typicalTurnaroundDays are nullable despite §2.1 not marking
+// them so, for the same reason as ClientProfile.companyName above: POST /auth/role
+// creates this row on first switch to `creator`, before onboarding (screens 06-08)
+// has collected any of it. "Finish & go live" (screen 08) is the point these are
+// expected to all be non-null — enforce that in the onboarding-completion endpoint,
+// not the schema.
+model CreatorProfile {
+  userId                String   @id @map("user_id") @db.Char(36)
+  name                  String?
+  bio                   String?  @db.Text
+  niches                Json? // string[] against the controlled vocab in §2.5 — extend in app code, not schema
+  startingRate          Decimal? @map("starting_rate") @db.Decimal(10, 2)
+  typicalTurnaroundDays Int?     @map("typical_turnaround_days")
+  avatarUrl             String?  @map("avatar_url")
+  avgRating             Decimal  @default(0) @map("avg_rating") @db.Decimal(2, 1)
+  reviewCount           Int      @default(0) @map("review_count")
+
+  user           User            @relation(fields: [userId], references: [id])
+  socialAccounts SocialAccount[]
+  portfolioItems PortfolioItem[]
+  bids           Bid[]
+  directOffers   DirectOffer[]
+  deals          Deal[]
+  payoutMethods  PayoutMethod[]
+
+  @@map("creator_profiles")
+}
+
+enum SocialPlatform {
+  instagram
+  tiktok
+  youtube
+  facebook
+}
+
+model SocialAccount {
+  id             String         @id @default(uuid()) @db.Char(36)
+  creatorId      String         @map("creator_id") @db.Char(36)
+  platform       SocialPlatform
+  handle         String
+  followerCount  Int            @map("follower_count")
+  engagementRate Decimal?       @map("engagement_rate") @db.Decimal(5, 2)
+  verified       Boolean        @default(false)
+  oauthTokenRef  String?        @map("oauth_token_ref") @db.Text
+  lastSyncedAt   DateTime?      @map("last_synced_at")
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [userId], onDelete: Cascade)
+
+  @@unique([creatorId, platform])
+  @@map("social_accounts")
+}
+
+model PortfolioItem {
+  id        String @id @default(uuid()) @db.Char(36)
+  creatorId String @map("creator_id") @db.Char(36)
+  mediaUrl  String @map("media_url")
+  sortOrder Int    @default(0) @map("sort_order")
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [userId], onDelete: Cascade)
+
+  @@map("portfolio_items")
+}
+
+// ---------- 2.2 Briefs, bids, offers ----------
+
+enum BriefFormat {
+  reel
+  ugc
+  youtube
+  tiktok
+  photo
+}
+
+enum BriefStatus {
+  open
+  in_progress
+  completed
+  cancelled
+}
+
+// `niche` isn't in the doc's §2.2 table, only `format` — but §3.3's own feed
+// query takes `?niche=`, and every brief card in the UI kit (screens 03/30) shows
+// a two-part tag ("REEL · BEAUTY", "PHOTO · PRODUCT" — format · niche together).
+// Added to close that gap; validated against the same open vocabulary as
+// CreatorProfile.niches (see lib/vocabularies.ts), not a native enum.
+model Brief {
+  id          String      @id @default(uuid()) @db.Char(36)
+  clientId    String      @map("client_id") @db.Char(36)
+  title       String
+  format      BriefFormat
+  niche       String
+  description String      @db.Text
+  budgetMin   Decimal     @map("budget_min") @db.Decimal(10, 2)
+  budgetMax   Decimal     @map("budget_max") @db.Decimal(10, 2)
+  deadline    DateTime    @db.Date
+  status      BriefStatus @default(open)
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  client          ClientProfile    @relation(fields: [clientId], references: [userId])
+  referenceImages ReferenceImage[]
+  bids            Bid[]
+  directOffers    DirectOffer[]
+  deals           Deal[]
+  threads         Thread[]
+
+  @@index([status])
+  @@index([clientId, status])
+  @@map("briefs")
+}
+
+model ReferenceImage {
+  id       String @id @default(uuid()) @db.Char(36)
+  briefId  String @map("brief_id") @db.Char(36)
+  imageUrl String @map("image_url")
+
+  brief Brief @relation(fields: [briefId], references: [id], onDelete: Cascade)
+
+  @@map("reference_images")
+}
+
+enum BidStatus {
+  pending
+  accepted
+  declined
+}
+
+model Bid {
+  id           String    @id @default(uuid()) @db.Char(36)
+  briefId      String    @map("brief_id") @db.Char(36)
+  creatorId    String    @map("creator_id") @db.Char(36)
+  price        Decimal   @db.Decimal(10, 2)
+  deliveryDays Int       @map("delivery_days")
+  note         String?   @db.Text
+  status       BidStatus @default(pending)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  brief   Brief          @relation(fields: [briefId], references: [id])
+  creator CreatorProfile @relation(fields: [creatorId], references: [userId])
+
+  @@unique([briefId, creatorId])
+  @@map("bids")
+}
+
+enum OfferStatus {
+  pending
+  countered
+  accepted
+  declined
+}
+
+model DirectOffer {
+  id             String      @id @default(uuid()) @db.Char(36)
+  clientId       String      @map("client_id") @db.Char(36)
+  creatorId      String      @map("creator_id") @db.Char(36)
+  briefId        String?     @map("brief_id") @db.Char(36)
+  price          Decimal     @db.Decimal(10, 2)
+  format         BriefFormat
+  turnaroundDays Int         @map("turnaround_days")
+  message        String?     @db.Text
+  status         OfferStatus @default(pending)
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  client    ClientProfile   @relation(fields: [clientId], references: [userId])
+  creator   CreatorProfile  @relation(fields: [creatorId], references: [userId])
+  brief     Brief?          @relation(fields: [briefId], references: [id])
+  revisions OfferRevision[]
+  deals     Deal[]
+
+  @@map("direct_offers")
+}
+
+enum ProposedBy {
+  client
+  creator
+}
+
+model OfferRevision {
+  id             String     @id @default(uuid()) @db.Char(36)
+  offerId        String     @map("offer_id") @db.Char(36)
+  proposedBy     ProposedBy @map("proposed_by")
+  price          Decimal    @db.Decimal(10, 2)
+  turnaroundDays Int        @map("turnaround_days")
+  note           String?    @db.Text
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  offer DirectOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@map("offer_revisions")
+}
+
+// ---------- 2.3 Deal lifecycle ----------
+
+enum DealSource {
+  bid
+  direct_offer
+}
+
+// Mirrors the state machine in §2.4 exactly. Enforce transitions with a single
+// Deal.transition(event) function in the service layer — never write `status = X`
+// from individual route handlers.
+enum DealStatus {
+  negotiating
+  agreement_pending
+  escrow_funded
+  in_production
+  draft_submitted
+  changes_requested
+  approved
+  live
+  completed
+  cancelled
+}
+
+model Deal {
+  id          String     @id @default(uuid()) @db.Char(36)
+  clientId    String     @map("client_id") @db.Char(36)
+  creatorId   String     @map("creator_id") @db.Char(36)
+  briefId     String?    @map("brief_id") @db.Char(36)
+  offerId     String?    @map("offer_id") @db.Char(36)
+  source      DealSource
+  agreedPrice Decimal    @map("agreed_price") @db.Decimal(10, 2)
+  status      DealStatus @default(negotiating)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  client       ClientProfile  @relation(fields: [clientId], references: [userId])
+  creator      CreatorProfile @relation(fields: [creatorId], references: [userId])
+  brief        Brief?         @relation(fields: [briefId], references: [id])
+  offer        DirectOffer?   @relation(fields: [offerId], references: [id])
+  agreement    Agreement?
+  drafts       Draft[]
+  escrow       Escrow?
+  reviews      Review[]
+  threads      Thread[]
+  transactions Transaction[]
+
+  @@map("deals")
+}
+
+enum UsageRights {
+  organic
+  paid_ads
+  whitelisting
+}
+
+model Agreement {
+  id                 String      @id @default(uuid()) @db.Char(36)
+  dealId             String      @unique @map("deal_id") @db.Char(36)
+  usageRights        UsageRights @map("usage_rights")
+  liveDurationDays   Int         @map("live_duration_days")
+  approvalRequired   Boolean     @map("approval_required")
+  minViews           Int?        @map("min_views")
+  clientConsentedAt  DateTime?   @map("client_consented_at")
+  creatorConsentedAt DateTime?   @map("creator_consented_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@map("agreements")
+}
+
+enum DraftStatus {
+  submitted
+  approved
+  changes_requested
+}
+
+model Draft {
+  id             String      @id @default(uuid()) @db.Char(36)
+  dealId         String      @map("deal_id") @db.Char(36)
+  fileUrl        String      @map("file_url")
+  note           String?     @db.Text
+  status         DraftStatus @default(submitted)
+  submittedAt    DateTime    @default(now()) @map("submitted_at")
+  reviewedAt     DateTime?   @map("reviewed_at")
+  clientFeedback String?     @map("client_feedback") @db.Text
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@map("drafts")
+}
+
+enum EscrowStatus {
+  unfunded
+  held
+  released
+  refunded
+}
+
+model Escrow {
+  id               String       @id @default(uuid()) @db.Char(36)
+  dealId           String       @unique @map("deal_id") @db.Char(36)
+  amount           Decimal      @db.Decimal(10, 2)
+  fundedAt         DateTime?    @map("funded_at")
+  liveStartedAt    DateTime?    @map("live_started_at")
+  // Not in §2.3's table — POST /deals/:id/mark-live (§3.8) takes an optional
+  // `live_url` in its body with nowhere documented to persist it.
+  liveUrl          String?      @map("live_url")
+  payoutReleasedAt DateTime?    @map("payout_released_at")
+  status           EscrowStatus @default(unfunded)
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([status, liveStartedAt])
+  @@map("escrows")
+}
+
+// ---------- 2.6 Payments ----------
+
+model PaymentMethod {
+  id            String  @id @default(uuid()) @db.Char(36)
+  clientId      String  @map("client_id") @db.Char(36)
+  providerToken String  @map("provider_token")
+  brand         String
+  last4         String  @db.Char(4)
+  isDefault     Boolean @default(false) @map("is_default")
+
+  client ClientProfile @relation(fields: [clientId], references: [userId])
+
+  @@map("payment_methods")
+}
+
+enum PayoutProvider {
+  stripe_connect
+}
+
+enum PayoutSchedule {
+  weekly
+  biweekly
+}
+
+model PayoutMethod {
+  id         String         @id @default(uuid()) @db.Char(36)
+  creatorId  String         @map("creator_id") @db.Char(36)
+  provider   PayoutProvider
+  accountRef String         @map("account_ref")
+  schedule   PayoutSchedule
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [userId])
+
+  @@map("payout_methods")
+}
+
+enum TransactionType {
+  escrow_fund
+  payout
+  refund
+}
+
+enum TransactionStatus {
+  pending
+  succeeded
+  failed
+}
+
+model Transaction {
+  id          String            @id @default(uuid()) @db.Char(36)
+  userId      String            @map("user_id") @db.Char(36)
+  dealId      String            @map("deal_id") @db.Char(36)
+  type        TransactionType
+  amount      Decimal           @db.Decimal(10, 2)
+  status      TransactionStatus @default(pending)
+  providerRef String?           @map("provider_ref")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  deal Deal @relation(fields: [dealId], references: [id])
+
+  @@index([userId])
+  @@map("transactions")
+}
+
+// ---------- 2.7 Messaging, notifications, reviews ----------
+
+// participant_ids uuid[] (exactly 2) -> explicit A/B FKs, see file header.
+model Thread {
+  id             String  @id @default(uuid()) @db.Char(36)
+  participantAId String  @map("participant_a_id") @db.Char(36)
+  participantBId String  @map("participant_b_id") @db.Char(36)
+  dealId         String? @map("deal_id") @db.Char(36)
+  briefId        String? @map("brief_id") @db.Char(36)
+
+  participantA User      @relation("ThreadParticipantA", fields: [participantAId], references: [id])
+  participantB User      @relation("ThreadParticipantB", fields: [participantBId], references: [id])
+  deal         Deal?     @relation(fields: [dealId], references: [id])
+  brief        Brief?    @relation(fields: [briefId], references: [id])
+  messages     Message[]
+
+  @@unique([participantAId, participantBId])
+  @@map("threads")
+}
+
+model Message {
+  id            String    @id @default(uuid()) @db.Char(36)
+  threadId      String    @map("thread_id") @db.Char(36)
+  senderId      String    @map("sender_id") @db.Char(36)
+  text          String?   @db.Text
+  attachmentUrl String?   @map("attachment_url")
+  systemEvent   String?   @map("system_event")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  readAt        DateTime? @map("read_at")
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User   @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@map("messages")
+}
+
+// type is String, not a native enum — the doc lists it with a trailing "...",
+// signaling an open/growing set; keep the known values in a single app-level
+// constant so adding one doesn't require a migration.
+model Notification {
+  id        String    @id @default(uuid()) @db.Char(36)
+  userId    String    @map("user_id") @db.Char(36)
+  type      String
+  payload   Json
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Char(36)
+  dealId     String   @map("deal_id") @db.Char(36)
+  reviewerId String   @map("reviewer_id") @db.Char(36)
+  revieweeId String   @map("reviewee_id") @db.Char(36)
+  rating     Int
+  tags       Json // string[] against the controlled vocab in §2.5 — extend in app code, not schema
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  deal     Deal @relation(fields: [dealId], references: [id])
+  reviewer User @relation("ReviewReviewer", fields: [reviewerId], references: [id])
+  reviewee User @relation("ReviewReviewee", fields: [revieweeId], references: [id])
+
+  @@unique([dealId, reviewerId])
+  @@map("reviews")
+}
+
+// Not in §2's table, but required by §3.11's `POST /push-tokens {platform, token}`.
+model PushToken {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  platform  String
+  token     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, token(length: 255)])
+  @@map("push_tokens")
+}

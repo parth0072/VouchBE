@@ -1,3 +1,4 @@
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -37,6 +38,21 @@ const apiRouter = express.Router();
 
 apiRouter.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Static dev tool, not an API route — served straight from tools/ (not
+// copied into dist/) so `git pull` alone keeps it current, no build step.
+// tools/console.js is a separate same-origin file rather than inline
+// script in the HTML because helmet's default CSP is script-src 'self'
+// with no 'unsafe-inline' — an inline <script> would be silently blocked
+// by the browser once served through this app (it isn't when the file is
+// just opened locally, which is why this only surfaced here).
+const toolsDir = path.join(__dirname, "..", "tools");
+apiRouter.get("/console", (_req, res) => {
+  res.sendFile(path.join(toolsDir, "api-console.html"));
+});
+apiRouter.get("/console.js", (_req, res) => {
+  res.type("application/javascript").sendFile(path.join(toolsDir, "console.js"));
 });
 
 apiRouter.use("/auth", authRouter);

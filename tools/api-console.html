@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vouch API Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#101312; --ink-soft:#38433d; --paper:#e4ece6; --card:#ffffff;
+    --line:#c9d8cd; --lime:#00c896; --lime-ink:#04241a; --coral:#ff6b4a; --muted:#5f6e64;
+    --warn:#c98a1f; --danger:#d9463c; --danger-bg:#fbe4e1;
+    --shadow: 0 1px 2px rgba(16,19,18,0.04), 0 8px 24px rgba(16,19,18,0.06);
+    --display: "Fraunces", Georgia, ui-serif, serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#eaf2ec; --ink-soft:#b9c7bf; --paper:#0a100d; --card:#141c17;
+      --line:#243129; --lime:#1de9a2; --lime-ink:#04241a; --coral:#ff7d5e; --muted:#7c8d82;
+      --warn:#e0ab4a; --danger:#ff6259; --danger-bg:#2b1210;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    font-size:14px; line-height:1.5;
+  }
+  ::selection{ background:var(--lime); color:var(--lime-ink); }
+
+  /* ---------- shell ---------- */
+  .shell{ display:grid; grid-template-columns:340px 1fr; grid-template-rows:auto 1fr; height:100vh; }
+  header{
+    grid-column:1 / -1; display:flex; align-items:baseline; gap:16px;
+    padding:16px 24px; border-bottom:1px solid var(--line); background:var(--card);
+  }
+  .wordmark{ font-family:var(--display); font-size:22px; letter-spacing:-0.02em; font-weight:600; color:var(--ink); }
+  .wordmark span{ color:var(--lime); }
+  .subtitle{ font-family:var(--mono); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); }
+  header .spacer{ flex:1; }
+  .base-url-picker{ display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; }
+  select, input, textarea{
+    font-family:inherit; font-size:13px; color:var(--ink); background:var(--card);
+    border:1px solid var(--line); border-radius:7px; padding:7px 10px; outline:none;
+  }
+  select:focus, input:focus, textarea:focus{ border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb, var(--lime) 22%, transparent); }
+  .base-url-picker select{ font-family:var(--mono); }
+  .base-url-picker input{ width:220px; font-family:var(--mono); }
+
+  /* ---------- sidebar ---------- */
+  aside{
+    border-right:1px solid var(--line); background:var(--card); overflow-y:auto;
+    display:flex; flex-direction:column;
+  }
+  .side-section{ border-bottom:1px solid var(--line); padding:16px; }
+  .side-kicker{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 10px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .btn{
+    font-family:var(--sans); font-weight:600; font-size:12.5px; cursor:pointer;
+    border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--ink);
+    padding:7px 12px; transition:transform .08s ease, border-color .15s ease;
+  }
+  .btn:hover{ border-color:var(--ink-soft); }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .btn-primary:hover{ opacity:0.88; border-color:var(--ink); }
+  .btn-lime{ background:var(--lime); color:var(--lime-ink); border-color:var(--lime); }
+  .btn-lime:hover{ opacity:0.9; }
+  .btn-ghost{ background:transparent; border-color:transparent; color:var(--muted); padding:4px 6px; }
+  .btn-ghost:hover{ color:var(--ink); border-color:var(--line); }
+  .btn-sm{ font-size:11px; padding:5px 9px; }
+  .btn-block{ width:100%; }
+  .btn-row{ display:flex; gap:8px; }
+
+  .session-form{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .session-form input{ width:100%; }
+  .session-list{ display:flex; flex-direction:column; gap:6px; }
+  .session-card{
+    border:1px solid var(--line); border-radius:9px; padding:9px 10px; cursor:pointer;
+    display:flex; flex-direction:column; gap:3px; background:var(--card);
+  }
+  .session-card.active{ border-color:var(--lime); box-shadow:0 0 0 1px var(--lime); }
+  .session-card .row1{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .session-email{ font-weight:700; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .role-pill{
+    font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.05em;
+    padding:2px 6px; border-radius:999px; border:1px solid var(--line); color:var(--muted); flex-shrink:0;
+  }
+  .role-pill.client{ color:var(--coral); border-color:color-mix(in srgb, var(--coral) 45%, var(--line)); }
+  .role-pill.creator{ color:var(--lime-ink); background:var(--lime); border-color:var(--lime); }
+  @media (prefers-color-scheme: dark){ .role-pill.creator{ color:var(--lime-ink); } }
+  .session-id{ font-family:var(--mono); font-size:9.5px; color:var(--muted); }
+  .session-actions{ display:flex; gap:5px; margin-top:2px; }
+  .no-sessions{ font-size:12px; color:var(--muted); font-style:italic; }
+
+  .endpoint-groups{ flex:1; overflow-y:auto; padding:8px 0; }
+  .group{ border-bottom:1px solid var(--line); }
+  .group-head{
+    display:flex; align-items:center; justify-content:space-between; width:100%; text-align:left;
+    background:none; border:none; padding:11px 16px; cursor:pointer; color:var(--ink);
+    font-family:var(--mono); font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase; font-weight:600;
+  }
+  .group-head:hover{ background:var(--paper); }
+  .group-count{ color:var(--muted); font-weight:400; }
+  .group-chevron{ transition:transform .15s ease; color:var(--muted); }
+  .group.open .group-chevron{ transform:rotate(90deg); }
+  .group-items{ display:none; padding:0 8px 8px; }
+  .group.open .group-items{ display:block; }
+  .ep-item{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none;
+    padding:7px 8px; border-radius:6px; cursor:pointer; color:var(--ink-soft); font-family:var(--mono); font-size:11.5px;
+  }
+  .ep-item:hover{ background:var(--paper); color:var(--ink); }
+  .ep-item.selected{ background:var(--paper); color:var(--ink); box-shadow:inset 2px 0 0 var(--lime); }
+  .m-tag{ font-weight:700; font-size:10px; width:42px; flex-shrink:0; }
+  .m-GET{ color:#2f7dd1; } .m-POST{ color:var(--lime-ink); background:var(--lime); border-radius:4px; text-align:center; }
+  @media (prefers-color-scheme: dark){ .m-GET{ color:#6cb2ff; } .m-POST{ color:var(--lime-ink); } }
+  .m-PATCH{ color:var(--warn); } .m-DELETE{ color:var(--danger); }
+  .ep-path{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ep-lock{ margin-left:auto; opacity:0.5; flex-shrink:0; }
+
+  /* ---------- main ---------- */
+  main{ overflow-y:auto; padding:24px 28px 60px; }
+  .panel{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); padding:20px; margin-bottom:20px;
+  }
+  .panel-title{ font-family:var(--display); font-size:19px; letter-spacing:-0.01em; margin:0 0 4px; }
+  .panel-desc{ font-size:12.5px; color:var(--muted); margin:0 0 16px; }
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state h2{ font-family:var(--display); font-weight:500; color:var(--ink-soft); font-size:22px; margin-bottom:6px; }
+
+  .req-line{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .method-badge{
+    font-family:var(--mono); font-weight:700; font-size:12.5px; padding:6px 10px; border-radius:6px;
+    flex-shrink:0; letter-spacing:0.02em;
+  }
+  .method-badge.GET{ color:#2f7dd1; background:color-mix(in srgb, #2f7dd1 12%, transparent); }
+  .method-badge.POST{ color:var(--lime-ink); background:var(--lime); }
+  .method-badge.PATCH{ color:var(--warn); background:color-mix(in srgb, var(--warn) 15%, transparent); }
+  .method-badge.DELETE{ color:var(--danger); background:color-mix(in srgb, var(--danger) 14%, transparent); }
+  .url-preview{
+    font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); overflow-x:auto; white-space:nowrap;
+    flex:1; padding:6px 0;
+  }
+  .url-preview b{ color:var(--ink); font-weight:600; }
+
+  .field-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px; margin-bottom:14px; }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{
+    font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted);
+  }
+  .field input{ width:100%; }
+
+  .auth-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--paper); border-radius:8px; border:1px solid var(--line); }
+  .auth-row label{ font-family:var(--mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); flex-shrink:0; }
+  .auth-row select{ flex:1; min-width:0; }
+  .auth-off{ color:var(--muted); font-style:italic; font-size:12px; }
+
+  textarea{ width:100%; min-height:140px; resize:vertical; font-family:var(--mono); font-size:12.5px; line-height:1.6; }
+  .body-label{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px;
+  }
+
+  .send-row{ display:flex; align-items:center; gap:12px; margin-top:16px; }
+  .status-pill{
+    font-family:var(--mono); font-weight:700; font-size:12px; padding:4px 10px; border-radius:999px;
+  }
+  .status-2xx{ color:var(--lime-ink); background:var(--lime); }
+  .status-4xx{ color:var(--warn); background:color-mix(in srgb, var(--warn) 16%, transparent); }
+  .status-5xx, .status-err{ color:var(--danger); background:var(--danger-bg); }
+  .timing{ font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+
+  .resp-body{
+    font-family:var(--mono); font-size:12.5px; line-height:1.6; background:var(--paper); border:1px solid var(--line);
+    border-radius:8px; padding:14px; overflow-x:auto; white-space:pre; max-height:420px; overflow-y:auto;
+  }
+  .resp-empty{ color:var(--muted); font-style:italic; font-size:12.5px; }
+  .json-key{ color:var(--coral); } .json-str{ color:#2f7dd1; } .json-num{ color:var(--lime-ink); font-weight:600; }
+  @media (prefers-color-scheme: dark){ .json-num{ color:var(--lime); } .json-str{ color:#6cb2ff; } }
+  .json-bool{ color:#9a5fd4; } .json-null{ color:var(--muted); }
+
+  .curl-box{
+    font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); background:var(--paper); border:1px solid var(--line);
+    border-radius:8px; padding:12px; overflow-x:auto; white-space:pre-wrap; word-break:break-all;
+  }
+
+  .history-list{ display:flex; flex-direction:column; gap:1px; }
+  .history-row{
+    display:grid; grid-template-columns:52px 1fr auto auto; gap:12px; align-items:center; padding:9px 10px;
+    border-radius:7px; cursor:pointer; font-family:var(--mono); font-size:12px;
+  }
+  .history-row:hover{ background:var(--paper); }
+  .history-time{ color:var(--muted); font-size:10.5px; }
+  .history-path{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--ink); color:var(--paper); font-size:12.5px; font-weight:600; padding:9px 16px;
+    border-radius:999px; box-shadow:var(--shadow); transition:opacity .2s ease, transform .2s ease; pointer-events:none; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header>
+    <div>
+      <div class="wordmark">Vouch<span>·</span>API Console</div>
+      <div class="subtitle">live requests, real responses</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="base-url-picker">
+      <label for="baseSelect" style="color:var(--muted)">Target</label>
+      <select id="baseSelect">
+        <option value="https://alphabyteinnovation.com/vouch">Production</option>
+        <option value="http://localhost:4000">Local dev</option>
+        <option value="custom">Custom&hellip;</option>
+      </select>
+      <input id="baseCustom" type="text" placeholder="https://…" style="display:none">
+    </div>
+  </header>
+
+  <aside>
+    <div class="side-section">
+      <div class="side-kicker">Sessions</div>
+      <div class="session-form">
+        <input id="authEmail" type="text" placeholder="test account email" autocomplete="off" data-lpignore="true" data-1p-ignore>
+        <input id="authPassword" type="text" placeholder="test account password" value="TestPass123!" autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <div class="btn-row">
+          <button class="btn btn-lime btn-sm" style="flex:1" onclick="doSignup()">Sign up</button>
+          <button class="btn btn-sm" style="flex:1" onclick="doLogin()">Log in</button>
+          <button class="btn btn-ghost btn-sm" title="Fill a fresh test email" onclick="fillTestEmail()">✦</button>
+        </div>
+      </div>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+
+    <div class="side-section" style="flex:1; display:flex; flex-direction:column; padding:0; border-bottom:none;">
+      <div class="side-kicker" style="padding:16px 16px 10px;">Endpoints</div>
+      <div class="endpoint-groups" id="endpointGroups"></div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="empty-state">
+      <h2>Pick an endpoint to start</h2>
+      <p>Sign up or log in on the left to create a session, then choose a call from the catalog. Every request here hits the real, live API — nothing is mocked.</p>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="console.js"></script>
+</body>
+</html>

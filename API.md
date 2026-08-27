@@ -1,6 +1,6 @@
 # Vouch API Reference
 
-Generated from the implementation in `src/`, not from the spec — every response shape below is what the code actually returns. Cross-reference: [`Vouch - Backend Requirements.md`](../Vouch%20-%20Backend%20Requirements.md) §3.
+Generated from the implementation in `src/`, not from the spec — every response shape below is what the code actually returns. Cross-reference: [`Vouch - Backend Requirements.md`](../Vouch%20-%20Backend%20Requirements.md) §3. For *which endpoint to call when* (signup order, the deal state machine, notification triggers) rather than per-endpoint detail, see [API_FLOWS.md](API_FLOWS.md).
 
 ## Conventions
 

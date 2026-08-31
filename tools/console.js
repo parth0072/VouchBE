@@ -269,16 +269,16 @@ function renderSessions(){
   const el = document.getElementById("sessionList");
   if (sessions.length === 0){ el.innerHTML = `<div class="no-sessions">No sessions yet — sign up above.</div>`; return; }
   el.innerHTML = sessions.map(s => `
-    <div class="session-card ${s.id === activeSessionId ? "active" : ""}" onclick="setActiveSession('${s.id}')">
+    <div class="session-card ${s.id === activeSessionId ? "active" : ""}" data-action="setActiveSession" data-id="${s.id}">
       <div class="row1">
         <span class="session-email">${escapeHtml(s.email)}</span>
         ${s.active_role ? `<span class="role-pill ${s.active_role}">${s.active_role}</span>` : `<span class="role-pill">no role</span>`}
       </div>
       <div class="session-id">${s.user_id ? s.user_id.slice(0,8) + "…" : ""} ${s.has_client_profile ? "· client✓" : ""} ${s.has_creator_profile ? "· creator✓" : ""}</div>
-      <div class="session-actions" onclick="event.stopPropagation()">
-        <button class="btn btn-ghost btn-sm" onclick="switchRole('${s.id}','client')">→ client</button>
-        <button class="btn btn-ghost btn-sm" onclick="switchRole('${s.id}','creator')">→ creator</button>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--danger)" onclick="removeSession('${s.id}')">remove</button>
+      <div class="session-actions" data-action="noop">
+        <button class="btn btn-ghost btn-sm" data-action="switchRole" data-id="${s.id}" data-role="client">→ client</button>
+        <button class="btn btn-ghost btn-sm" data-action="switchRole" data-id="${s.id}" data-role="creator">→ creator</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--danger)" data-action="removeSession" data-id="${s.id}">remove</button>
       </div>
     </div>
   `).join("");
@@ -294,13 +294,13 @@ function renderEndpointGroups(){
     const items = ENDPOINTS.filter(e => e.group === g);
     return `
     <div class="group" data-group="${g}">
-      <button class="group-head" onclick="toggleGroup('${g}')">
+      <button class="group-head" data-action="toggleGroup" data-group="${g}">
         <span>${g} <span class="group-count">(${items.length})</span></span>
         <span class="group-chevron">▸</span>
       </button>
       <div class="group-items">
         ${items.map((e, i) => `
-          <button class="ep-item" data-key="${g}::${i}" onclick="selectEndpoint('${g}', ${i})">
+          <button class="ep-item" data-key="${g}::${i}" data-action="selectEndpoint" data-group="${g}" data-idx="${i}">
             <span class="m-tag m-${e.method}">${e.method}</span>
             <span class="ep-path">${e.path}</span>
             ${e.auth === "bearer" ? '<span class="ep-lock">🔒</span>' : ""}
@@ -364,7 +364,7 @@ function renderRequestPanel(){
       ${ep.body !== undefined ? `
         <div class="body-label">
           <span>Body</span>
-          <button class="btn btn-ghost btn-sm" onclick="resetBody()">reset to example</button>
+          <button class="btn btn-ghost btn-sm" data-action="resetBody">reset to example</button>
         </div>
         <textarea id="bodyEditor" spellcheck="false"></textarea>
       ` : ""}
@@ -372,10 +372,10 @@ function renderRequestPanel(){
       <div class="url-preview" id="urlPreview" style="margin-top:14px;"></div>
 
       <div class="send-row">
-        <button class="btn btn-primary" onclick="sendRequest()">Send →</button>
+        <button class="btn btn-primary" data-action="sendRequest">Send →</button>
         <span id="sendStatus"></span>
         <div style="flex:1"></div>
-        <button class="btn btn-ghost btn-sm" onclick="copyCurl()">copy as curl</button>
+        <button class="btn btn-ghost btn-sm" data-action="copyCurl">copy as curl</button>
       </div>
     </div>
 
@@ -491,7 +491,7 @@ function renderResponse(status, ms, body){
       <span class="status-pill ${statusClass(status)}">${status === "ERR" ? "NETWORK ERROR" : status}</span>
       <span class="timing">${ms}ms</span>
       <div style="flex:1"></div>
-      <button class="btn btn-ghost btn-sm" onclick="copyResponse()">copy JSON</button>
+      <button class="btn btn-ghost btn-sm" data-action="copyResponse">copy JSON</button>
     </div>
     <div class="resp-body" id="respBody">${syntaxHighlight(body)}</div>
   `;
@@ -541,7 +541,7 @@ function renderHistory(){
   if (!el) return;
   if (history.length === 0){ el.innerHTML = `<div class="no-sessions">No requests sent yet.</div>`; return; }
   el.innerHTML = history.slice(0, 20).map((h, i) => `
-    <div class="history-row" onclick='replayHistory(${i})'>
+    <div class="history-row" data-action="replayHistory" data-idx="${i}">
       <span class="method-badge ${h.method}" style="font-size:10px;padding:3px 6px;">${h.method}</span>
       <span class="history-path">${escapeHtml(h.path)}</span>
       <span class="status-pill ${statusClass(h.status)}" style="font-size:10px;">${h.status}</span>
@@ -559,6 +559,42 @@ function replayHistory(i){
 function escapeHtml(s){
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 }
+
+// ============================================================
+// Click dispatch
+// ============================================================
+// helmet's default CSP sets script-src-attr 'none' on this whole app, which
+// silently blocks every inline onclick="..." attribute — the browser drops
+// the click with no error visible to a user, just a button that does
+// nothing. Confirmed live: every dynamically-rendered control here used
+// onclick until a real click on the deployed page (not a direct function
+// call) proved none of them fired, and the console showed the CSP block.
+// One delegated listener added via addEventListener (from this externally
+// loaded script) isn't subject to script-src-attr at all — that directive
+// only restricts inline HTML attributes — so every control below uses
+// data-action instead.
+const ACTIONS = {
+  fillTestEmail: () => fillTestEmail(),
+  doSignup: () => doSignup(),
+  doLogin: () => doLogin(),
+  setActiveSession: (el) => setActiveSession(el.dataset.id),
+  switchRole: (el) => switchRole(el.dataset.id, el.dataset.role),
+  removeSession: (el) => removeSession(el.dataset.id),
+  toggleGroup: (el) => toggleGroup(el.dataset.group),
+  selectEndpoint: (el) => selectEndpoint(el.dataset.group, Number(el.dataset.idx)),
+  resetBody: () => resetBody(),
+  sendRequest: () => sendRequest(),
+  copyCurl: () => copyCurl(),
+  copyResponse: () => copyResponse(),
+  replayHistory: (el) => replayHistory(Number(el.dataset.idx)),
+  noop: () => {},
+};
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const action = ACTIONS[el.dataset.action];
+  if (action) action(el);
+});
 
 // ============================================================
 // Boot

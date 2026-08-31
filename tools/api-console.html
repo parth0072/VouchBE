@@ -241,9 +241,9 @@
         <input id="authEmail" type="text" placeholder="test account email" autocomplete="off" data-lpignore="true" data-1p-ignore>
         <input id="authPassword" type="text" placeholder="test account password" value="TestPass123!" autocomplete="new-password" data-lpignore="true" data-1p-ignore>
         <div class="btn-row">
-          <button class="btn btn-lime btn-sm" style="flex:1" onclick="doSignup()">Sign up</button>
-          <button class="btn btn-sm" style="flex:1" onclick="doLogin()">Log in</button>
-          <button class="btn btn-ghost btn-sm" title="Fill a fresh test email" onclick="fillTestEmail()">✦</button>
+          <button class="btn btn-lime btn-sm" style="flex:1" data-action="doSignup">Sign up</button>
+          <button class="btn btn-sm" style="flex:1" data-action="doLogin">Log in</button>
+          <button class="btn btn-ghost btn-sm" title="Fill a fresh test email" data-action="fillTestEmail">✦</button>
         </div>
       </div>
       <div class="session-list" id="sessionList"></div>

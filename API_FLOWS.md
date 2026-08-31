@@ -7,8 +7,15 @@ All endpoints below are relative to the base URL in API.md's Conventions section
 ## 1. Auth & role — do this before anything else
 
 ```
-POST /auth/signup  { email, password }
+POST /auth/signup  { email, password, name? }
   -> { access_token, refresh_token }
+
+PATCH /me 🔒  { avatar_url? }               — optional, works pre-role (see below)
+
+POST /auth/send-verification-code 🔒        — optional, 501 until SMTP_* is set
+  -> emails a 6-digit code, 10 min TTL
+POST /auth/verify-email 🔒  { code }
+  -> sets email_verified_at
 
 POST /auth/role 🔒  { role: "client" | "creator" }
   -> creates client_profiles/creator_profiles row on first switch, sets active_role
@@ -17,6 +24,10 @@ POST /auth/role 🔒  { role: "client" | "creator" }
 **Call `POST /auth/role` immediately after signup, every time — even to just confirm the role the user picked on the signup screen.** `active_role` is set to `"client"` at signup as a non-null placeholder only; the actual profile row (`client_profiles` or `creator_profiles`) does **not** exist until `/auth/role` creates it. Any write that depends on that row — most importantly `POST /briefs` — returns `400` ("A required related record doesn't exist yet...") if you skip this step. This is the #1 integration gotcha in this API.
 
 One account can hold both roles (`has_client_profile` and `has_creator_profile` are independent booleans on `GET /me`) — calling `/auth/role` again with the other value switches sides and creates the second profile row if it doesn't exist yet. Nothing about existing deals/briefs/etc. changes when you switch.
+
+**`name` and `avatar_url` live on `users` directly, not on either profile — call them any time, in any order, including before `/auth/role`.** The prototype's signup flow collects a name (step 1) and an optional profile photo (step 2) before role-select even happens, which is exactly why these two fields don't follow the "needs a profile row first" rule everything else does. `avatar_url` also gets synced into `client_profile`/`creator_profile` automatically — immediately if a profile already exists, or backfilled the moment `/auth/role` creates one — since creator search/bids/etc. still read it from there, not from `users`.
+
+**Email verification is entirely optional and doesn't gate anything else in the API** — no other endpoint checks `email_verified_at`. Call `send-verification-code` any time after signup (resend by calling it again; it 400s once already verified) and `verify-email` with the code it emails. Both return `501` until `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` are set — same "real integration, gated, never fakes success" pattern as Stripe and OAuth.
 
 `POST /auth/login` / `POST /auth/refresh` return the same token pair shape for returning sessions — no role call needed on login, since the row already exists from signup.
 

@@ -17,7 +17,7 @@ Generated from the implementation in `src/`, not from the spec — every respons
   ```
   Status codes used: `400` validation/business-rule rejection — including writes made before `POST /auth/role` has created the caller's `client_profiles`/`creator_profiles` row (signup's `active_role` is just a placeholder until that call lands, per `auth.service.ts`; call it right after signup even to confirm the default role) — `401` missing/invalid token, `403` wrong owner/role, `404` not found, `409` conflicting state (e.g. re-accepting an already-accepted bid), `501` real integration not configured yet (Stripe/OAuth — see below). Each endpoint below only calls out the *non-generic* errors specific to it.
 - **Pagination**: only `GET /threads/:id/messages` is paginated (cursor via `?before=`). Plain list endpoints (`/briefs/mine`, `/bids/mine`, etc.) return everything — the original doc's "`all list routes support ?page=&limit=`" convention was never implemented. Flagging this as a known gap, not a silent omission.
-- **Not faked**: endpoints touching Stripe (escrow fund, payouts, Connect onboarding) or OAuth (social account linking, OAuth signup) run real SDK calls gated behind env vars. Until you set `STRIPE_SECRET_KEY` / the platform `*_CLIENT_ID` vars, they return `501` rather than pretending to succeed — see `.env.example`.
+- **Not faked**: endpoints touching Stripe (escrow fund, payouts, Connect onboarding), OAuth (social account linking, OAuth signup), or email (verification codes) run real integration calls gated behind env vars. Until you set `STRIPE_SECRET_KEY` / the platform `*_CLIENT_ID` vars / `SMTP_*`, they return `501` rather than pretending to succeed — see `.env.example`.
 
 ---
 
@@ -28,8 +28,9 @@ Password path only — OAuth is real code gated behind config, see below.
 
 **Request**
 ```json
-{ "email": "reya@example.com", "password": "correcthorse123" }
+{ "email": "reya@example.com", "password": "correcthorse123", "name": "Reya Okafor" }
 ```
+`name` is optional — added for the 3-step signup flow (name → email/password → verify email) without breaking existing callers that only ever sent email+password.
 **Response `201`**
 ```json
 { "access_token": "eyJhbGciOi...", "refresh_token": "eyJhbGciOi..." }
@@ -66,6 +67,17 @@ Switches which side of the app you're in; creates the profile row on first switc
 No server-side session to invalidate — no refresh-token table exists in §2's data model. Purely a signal for the client to discard its tokens.
 
 **Response `200`** `{ "ok": true }`
+
+### `POST /auth/send-verification-code` 🔒
+Not in the original doc — added for the prototype's "Verify your email" step. Generates a fresh 6-digit code (10 min TTL, overwrites any previous unused one) and emails it via real SMTP — `.env.example` documents the `SMTP_*` vars.
+
+**Response `200`** `{ "sent": true }`
+**Errors**: `400` `{ "error": "Email is already verified" }`; `501` if `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` aren't all set — never claims `sent: true` when no email actually went out.
+
+### `POST /auth/verify-email` 🔒
+**Request** `{ "code": "271429" }` — exactly 6 characters.
+**Response `200`** `{ "verified": true }` — sets `users.email_verified_at`, clears the stored code.
+**Errors**: `400` `{ "error": "Invalid or expired code" }` (wrong code, expired, or none was ever sent); `400` `{ "error": "Email is already verified" }`.
 
 ---
 
@@ -519,18 +531,20 @@ If the reviewee has a `CreatorProfile`, its `avg_rating`/`review_count` are reco
 **Response `200`**
 ```json
 {
-  "id": "5b1f7c2e-...", "email": "reya@example.com", "active_role": "creator",
+  "id": "5b1f7c2e-...", "email": "reya@example.com", "name": "Reya Okafor",
+  "avatar_url": "https://vouch-media.s3.amazonaws.com/avatars/reya.jpg",
+  "email_verified_at": null, "active_role": "creator",
   "has_client_profile": false, "has_creator_profile": true,
   "notification_prefs": null, "created_at": "...", "updated_at": "...",
   "client_profile": null,
-  "creator_profile": { "user_id": "5b1f7c2e-...", "name": "Reya Okafor", "...": "full CreatorProfile row" }
+  "creator_profile": { "user_id": "5b1f7c2e-...", "name": "Reya Okafor", "avatar_url": "https://vouch-media.s3.amazonaws.com/avatars/reya.jpg", "...": "full CreatorProfile row" }
 }
 ```
-Never includes `password_hash` — it's excluded via an explicit column `select`, not stripped after the fact.
+Never includes `password_hash`, `verification_code`, or `verification_code_expires_at` — excluded via an explicit column `select`, not stripped after the fact. Top-level `name`/`avatar_url`/`email_verified_at` are on `users` directly — distinct from `creator_profile.name`/`creator_profile.avatar_url`, which are separate, independently-editable fields kept in sync (see `PATCH /me` below).
 
 ### `PATCH /me`
-**Request** `{ "avatar_url": "https://...", "notification_prefs": { "push": true, "email_digest": false } }`
-`avatar_url` isn't a `User` column — it's written to whichever of `client_profile`/`creator_profile` you actually have (kept in sync across both if you hold both roles).
+**Request** `{ "name": "Reya O.", "avatar_url": "https://...", "notification_prefs": { "push": true, "email_digest": false } }` — all optional.
+Both `name` and `avatar_url` are `User` columns and always update directly, regardless of role or whether a profile exists yet — the prototype's "Add a profile photo" step (step 2 of 4) runs *before* role-select, so before either `client_profile`/`creator_profile` exists to write into. `avatar_url` is *also* synced into whichever of `client_profile`/`creator_profile` already exist (kept in sync across both if you hold both roles) — that's still what creator search/bids/etc. read for display — and backfilled from `users.avatar_url` automatically the moment `POST /auth/role` creates a new profile row, so a photo set pre-role-select doesn't silently vanish from those.
 **Response `200`** — same shape as `GET /me`.
 
 ---

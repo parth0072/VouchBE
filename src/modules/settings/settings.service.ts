@@ -9,6 +9,9 @@ export async function getMe(userId: string) {
     .select([
       "id",
       "email",
+      "name",
+      "avatarUrl",
+      "emailVerifiedAt",
       "oauthProviders",
       "activeRole",
       "hasClientProfile",
@@ -34,24 +37,31 @@ export async function getMe(userId: string) {
 }
 
 export interface UpdateMeInput {
+  name?: string;
   avatarUrl?: string;
   notificationPrefs?: Record<string, unknown>;
 }
 
-// avatar_url isn't a User column (§2.1 only puts it on ClientProfile/
-// CreatorProfile) — kept in sync across whichever profile(s) exist rather than
-// picking just the currently-active one, since it's the same person's photo
-// either way and screen 26 is described as "one settings screen shared by both
-// roles."
+// avatar_url is on users AND (once they exist) on client_profiles/
+// creator_profiles — written to users always (that's the only place it can
+// go for the prototype's "Add a profile photo" step, which runs before
+// role-select creates either profile row), and synced into whichever
+// profile(s) already exist too, since creator search/bids/etc. still read
+// avatar_url from the profile tables, not from users.
 export async function updateMe(userId: string, input: UpdateMeInput) {
   const user = await db.selectFrom("users").select(["hasClientProfile", "hasCreatorProfile"]).where("id", "=", userId).executeTakeFirst();
   if (!user) throw new ApiError(404, "User not found");
 
   await db.transaction().execute(async (trx) => {
-    if (input.notificationPrefs !== undefined) {
+    if (input.name !== undefined || input.avatarUrl !== undefined || input.notificationPrefs !== undefined) {
       await trx
         .updateTable("users")
-        .set({ notificationPrefs: JSON.stringify(input.notificationPrefs), updatedAt: new Date() })
+        .set({
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+          ...(input.notificationPrefs !== undefined ? { notificationPrefs: JSON.stringify(input.notificationPrefs) } : {}),
+          updatedAt: new Date(),
+        })
         .where("id", "=", userId)
         .execute();
     }

@@ -37,6 +37,19 @@ export interface UsersTable {
   hasClientProfile: Generated<boolean>;
   hasCreatorProfile: Generated<boolean>;
   notificationPrefs: Json<Record<string, unknown>> | null;
+  // db/migrations/002 — name + email verification for the 3-step signup
+  // flow. name is nullable: optional in POST /auth/signup, not every caller
+  // sends it. verificationCode/ExpiresAt hold only the one currently-active
+  // code (overwritten by each new send, cleared on successful verify).
+  name: string | null;
+  // Always writable, even before a client_profiles/creator_profiles row
+  // exists (the photo step precedes role-select) — settings.service.ts also
+  // syncs this into whichever profile row(s) exist, since that's still what
+  // creator search/bids/etc. actually read for display.
+  avatarUrl: string | null;
+  emailVerifiedAt: Date | null;
+  verificationCode: string | null;
+  verificationCodeExpiresAt: Date | null;
   createdAt: Generated<Date>;
   updatedAt: Date;
 }

@@ -15,6 +15,22 @@ CREATE TABLE `users` (
     `has_client_profile` BOOLEAN NOT NULL DEFAULT false,
     `has_creator_profile` BOOLEAN NOT NULL DEFAULT false,
     `notification_prefs` JSON NULL,
+    -- Added for the name + email-verification signup flow (name step + OTP
+    -- step in the prototype) — not in the original §2 data model. `name`
+    -- is nullable because it's optional in POST /auth/signup (not sent by
+    -- every existing caller); verification_code/expires_at hold the one
+    -- currently-active code, overwritten by each new send, cleared on
+    -- successful verify.
+    `name` VARCHAR(191) NULL,
+    -- db/migrations/003 — set-able before any client_profiles/creator_profiles
+    -- row exists (the photo step precedes role-select), unlike the existing
+    -- client_profiles.avatar_url/creator_profiles.avatar_url which settings
+    -- service still syncs into once a profile exists (those remain what
+    -- creator search/bids/etc. actually read).
+    `avatar_url` VARCHAR(191) NULL,
+    `email_verified_at` DATETIME(3) NULL,
+    `verification_code` VARCHAR(6) NULL,
+    `verification_code_expires_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 

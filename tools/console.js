@@ -3,8 +3,8 @@
 // ============================================================
 const ENDPOINTS = [
   // --- Auth ---
-  { group:"Auth", method:"POST", path:"/auth/signup", auth:"none", desc:"Password signup. Call /auth/role right after — active_role at signup is just a placeholder.",
-    body:{ email:"reya@example.com", password:"correcthorse123" } },
+  { group:"Auth", method:"POST", path:"/auth/signup", auth:"none", desc:"Password signup. name is optional. Call /auth/role right after — active_role at signup is just a placeholder.",
+    body:{ email:"reya@example.com", password:"correcthorse123", name:"Reya Okafor" } },
   { group:"Auth", method:"POST", path:"/auth/login", auth:"none", desc:"Existing account login.",
     body:{ email:"reya@example.com", password:"correcthorse123" } },
   { group:"Auth", method:"POST", path:"/auth/refresh", auth:"none", desc:"Re-sign a fresh token pair from a refresh token.",
@@ -12,6 +12,9 @@ const ENDPOINTS = [
   { group:"Auth", method:"POST", path:"/auth/role", auth:"bearer", desc:"Switch active role; creates the client_profiles/creator_profiles row on first switch.",
     body:{ role:"creator" } },
   { group:"Auth", method:"POST", path:"/auth/logout", auth:"bearer", desc:"Client-side signal only — no server session to invalidate." },
+  { group:"Auth", method:"POST", path:"/auth/send-verification-code", auth:"bearer", desc:"Emails a 6-digit code, 10 min TTL. 501 until SMTP_HOST/PORT/USER/PASSWORD are set. 400 if already verified." },
+  { group:"Auth", method:"POST", path:"/auth/verify-email", auth:"bearer", desc:"Checks the emailed code, sets email_verified_at. Nothing else in the API gates on this.",
+    body:{ code:"271429" } },
 
   // --- Onboarding ---
   { group:"Onboarding", method:"GET", path:"/social-accounts/:platform/oauth-url", auth:"bearer", desc:"platform = instagram | tiktok | youtube | facebook. 501 until OAuth env vars are set." },
@@ -105,9 +108,9 @@ const ENDPOINTS = [
   { group:"Reviews", method:"GET", path:"/users/:id/reviews", auth:"bearer", desc:"Public review summary + list for a user." },
 
   // --- Settings ---
-  { group:"Settings", method:"GET", path:"/me", auth:"bearer", desc:"Never includes password_hash." },
-  { group:"Settings", method:"PATCH", path:"/me", auth:"bearer", desc:"avatar_url is written to whichever profile you hold.",
-    body:{ avatar_url:"https://example.com/avatar.jpg", notification_prefs:{ push:true, email_digest:false } } },
+  { group:"Settings", method:"GET", path:"/me", auth:"bearer", desc:"Never includes password_hash, verification_code, or verification_code_expires_at." },
+  { group:"Settings", method:"PATCH", path:"/me", auth:"bearer", desc:"name/avatar_url are User columns — always work, even pre-role-select. avatar_url is also synced into client_profile/creator_profile once one exists.",
+    body:{ name:"Reya O.", avatar_url:"https://example.com/avatar.jpg", notification_prefs:{ push:true, email_digest:false } } },
 
   // --- Deals (core) ---
   { group:"Deals", method:"GET", path:"/deals/mine", auth:"bearer", desc:"All deals + nested agreement/escrow (nullable until set)." },

@@ -9,6 +9,7 @@ export async function getMe(req: Request, res: Response) {
 }
 
 const updateMeSchema = z.object({
+  name: z.string().min(1).optional(),
   avatar_url: z.string().url().optional(),
   notification_prefs: z.record(z.unknown()).optional(),
 });
@@ -16,6 +17,7 @@ const updateMeSchema = z.object({
 export async function updateMe(req: Request, res: Response) {
   const body = updateMeSchema.parse(req.body);
   const user = await settingsService.updateMe(req.user!.id, {
+    name: body.name,
     avatarUrl: body.avatar_url,
     notificationPrefs: body.notification_prefs,
   });

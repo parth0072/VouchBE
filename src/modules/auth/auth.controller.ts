@@ -5,6 +5,10 @@ import * as authService from "./auth.service";
 const passwordSignupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  // Optional: existing callers (validate scripts, the API console, earlier
+  // prototype wiring) don't send this, and shouldn't start 400ing because a
+  // newer client added a name step ahead of them.
+  name: z.string().min(1).optional(),
 });
 
 const oauthSignupSchema = z.object({
@@ -20,7 +24,7 @@ export async function signup(req: Request, res: Response) {
   const tokens =
     "oauth_provider" in body
       ? await authService.signupWithOAuth(body.oauth_provider, body.oauth_token)
-      : await authService.signupWithPassword(body.email, body.password);
+      : await authService.signupWithPassword(body.email, body.password, body.name);
 
   res.status(201).json(tokens);
 }
@@ -69,4 +73,19 @@ export async function switchRole(req: Request, res: Response) {
 // becomes a real requirement.
 export async function logout(_req: Request, res: Response) {
   res.status(200).json({ ok: true });
+}
+
+export async function sendVerificationCode(req: Request, res: Response) {
+  await authService.sendVerificationCode(req.user!.id);
+  res.status(200).json({ sent: true });
+}
+
+const verifyEmailSchema = z.object({
+  code: z.string().length(6),
+});
+
+export async function verifyEmail(req: Request, res: Response) {
+  const { code } = verifyEmailSchema.parse(req.body);
+  await authService.verifyEmail(req.user!.id, code);
+  res.status(200).json({ verified: true });
 }

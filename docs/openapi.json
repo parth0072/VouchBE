@@ -189,6 +189,24 @@
             "type": "string",
             "format": "email"
           },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Reya Okafor",
+            "description": "On users directly — settable via POST /auth/signup or PATCH /me, before any profile row exists"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "On users directly (settable pre-role-select) and synced into client_profile/creator_profile once they exist"
+          },
+          "email_verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-19T14:32:00.000Z",
+            "nullable": true,
+            "description": "Set by POST /auth/verify-email; nothing else in the API gates on this"
+          },
           "active_role": {
             "type": "string",
             "enum": [
@@ -1286,6 +1304,10 @@
                       "password": {
                         "type": "string",
                         "minLength": 8
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Optional — existing callers that only send email+password still work"
                       }
                     },
                     "required": [
@@ -1312,7 +1334,8 @@
               },
               "example": {
                 "email": "reya@example.com",
-                "password": "correcthorse123"
+                "password": "correcthorse123",
+                "name": "Reya Okafor"
               }
             }
           }
@@ -1535,6 +1558,131 @@
                 },
                 "example": {
                   "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/send-verification-code": {
+      "post": {
+        "summary": "Email a fresh 6-digit verification code (10 min TTL)",
+        "description": "Real SMTP send, gated — 501 until SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD are all set. Never returns sent:true without a real email having gone out. Call again to resend (overwrites the previous code); 400s once already verified.",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "sent": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Already verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Email is already verified"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotConfigured"
+          }
+        }
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "summary": "Verify the code emailed by POST /auth/send-verification-code",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 6
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              },
+              "example": {
+                "code": "271429"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "verified": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "verified": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Wrong/expired code, none ever sent, or already verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Invalid or expired code"
                 }
               }
             }
@@ -4298,7 +4446,8 @@
         }
       },
       "patch": {
-        "summary": "Update avatar_url and/or notification_prefs",
+        "summary": "Update name, avatar_url, and/or notification_prefs",
+        "description": "name/avatar_url are User columns and always work, even before POST /auth/role has created a profile row — avatar_url is additionally synced into client_profile/creator_profile once one exists.",
         "tags": [
           "Settings"
         ],
@@ -4314,6 +4463,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string"
+                  },
                   "avatar_url": {
                     "type": "string"
                   },
@@ -4323,6 +4475,7 @@
                 }
               },
               "example": {
+                "name": "Reya O.",
                 "avatar_url": "https://...",
                 "notification_prefs": {
                   "push": true,

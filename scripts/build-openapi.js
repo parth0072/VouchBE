@@ -77,6 +77,9 @@ const schemas = {
     properties: {
       id: uuid,
       email: { type: "string", format: "email" },
+      name: { type: "string", nullable: true, example: "Reya Okafor", description: "On users directly — settable via POST /auth/signup or PATCH /me, before any profile row exists" },
+      avatar_url: { type: "string", nullable: true, description: "On users directly (settable pre-role-select) and synced into client_profile/creator_profile once they exist" },
+      email_verified_at: { ...nullableTimestamp, description: "Set by POST /auth/verify-email; nothing else in the API gates on this" },
       active_role: { type: "string", enum: ["client", "creator"] },
       has_client_profile: { type: "boolean" },
       has_creator_profile: { type: "boolean" },
@@ -404,11 +407,19 @@ const paths = {
       body: {
         schema: {
           oneOf: [
-            { type: "object", properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 } }, required: ["email", "password"] },
+            {
+              type: "object",
+              properties: {
+                email: { type: "string", format: "email" },
+                password: { type: "string", minLength: 8 },
+                name: { type: "string", description: "Optional — existing callers that only send email+password still work" },
+              },
+              required: ["email", "password"],
+            },
             { type: "object", properties: { oauth_provider: { type: "string" }, oauth_token: { type: "string" } }, required: ["oauth_provider", "oauth_token"] },
           ],
         },
-        example: { email: "reya@example.com", password: "correcthorse123" },
+        example: { email: "reya@example.com", password: "correcthorse123", name: "Reya Okafor" },
       },
       responsesExtra: {
         "201": { description: "Account created", ...j(ref("TokenPair")) },
@@ -465,6 +476,29 @@ const paths = {
       summary: "Discard tokens client-side (stateless JWTs — nothing to revoke server-side)",
       tags: ["Auth"],
       responsesExtra: { "200": { description: "OK", ...j({ type: "object", properties: { ok: { type: "boolean" } } }, { ok: true }) } },
+    }),
+  },
+  "/auth/send-verification-code": {
+    post: op({
+      summary: "Email a fresh 6-digit verification code (10 min TTL)",
+      description: "Real SMTP send, gated — 501 until SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD are all set. Never returns sent:true without a real email having gone out. Call again to resend (overwrites the previous code); 400s once already verified.",
+      tags: ["Auth"],
+      responsesExtra: {
+        "200": { description: "OK", ...j({ type: "object", properties: { sent: { type: "boolean" } } }, { sent: true }) },
+        "400": errorResponse("Already verified", { error: "Email is already verified" }),
+        "501": { $ref: "#/components/responses/NotConfigured" },
+      },
+    }),
+  },
+  "/auth/verify-email": {
+    post: op({
+      summary: "Verify the code emailed by POST /auth/send-verification-code",
+      tags: ["Auth"],
+      body: { schema: { type: "object", properties: { code: { type: "string", minLength: 6, maxLength: 6 } }, required: ["code"] }, example: { code: "271429" } },
+      responsesExtra: {
+        "200": { description: "OK", ...j({ type: "object", properties: { verified: { type: "boolean" } } }, { verified: true }) },
+        "400": errorResponse("Wrong/expired code, none ever sent, or already verified", { error: "Invalid or expired code" }),
+      },
     }),
   },
 
@@ -996,11 +1030,12 @@ const paths = {
   "/me": {
     get: op({ summary: "Get the current user", tags: ["Settings"], responsesExtra: { "200": { description: "OK", ...j(ref("User")) } } }),
     patch: op({
-      summary: "Update avatar_url and/or notification_prefs",
+      summary: "Update name, avatar_url, and/or notification_prefs",
+      description: "name/avatar_url are User columns and always work, even before POST /auth/role has created a profile row — avatar_url is additionally synced into client_profile/creator_profile once one exists.",
       tags: ["Settings"],
       body: {
-        schema: { type: "object", properties: { avatar_url: { type: "string" }, notification_prefs: { type: "object" } } },
-        example: { avatar_url: "https://...", notification_prefs: { push: true, email_digest: false } },
+        schema: { type: "object", properties: { name: { type: "string" }, avatar_url: { type: "string" }, notification_prefs: { type: "object" } } },
+        example: { name: "Reya O.", avatar_url: "https://...", notification_prefs: { push: true, email_digest: false } },
       },
       responsesExtra: { "200": { description: "OK", ...j(ref("User")) } },
     }),

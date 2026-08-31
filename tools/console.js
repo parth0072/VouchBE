@@ -18,17 +18,17 @@ const ENDPOINTS = [
   { group:"Onboarding", method:"POST", path:"/social-accounts/:platform/callback", auth:"bearer", desc:"501 until OAuth env vars are set.",
     body:{ code:"abc123" } },
   { group:"Onboarding", method:"DELETE", path:"/social-accounts/:id", auth:"bearer", desc:"Remove a linked social account." },
-  { group:"Onboarding", method:"PATCH", path:"/creator-profile", auth:"bearer", desc:"All fields optional.",
+  { group:"Onboarding", method:"PATCH", path:"/creator-profile", auth:"bearer", desc:"All fields optional. niches values are lowercase: beauty | fitness | product | travel | food | tech (400s on anything else, e.g. \"Beauty\").",
     body:{ name:"Reya Okafor", bio:"Beauty + product content.", niches:["beauty","product"], starting_rate:250, typical_turnaround_days:3 } },
   { group:"Onboarding", method:"POST", path:"/creator-profile/portfolio", auth:"bearer", desc:"media_url is an already-uploaded S3 URL, not a file upload.",
     body:{ media_url:"https://vouch-media.s3.amazonaws.com/portfolio/abc.jpg" } },
   { group:"Onboarding", method:"DELETE", path:"/creator-profile/portfolio/:id", auth:"bearer", desc:"Remove a portfolio item." },
 
   // --- Briefs ---
-  { group:"Briefs", method:"POST", path:"/briefs", auth:"bearer", desc:"Client posts a brief. Needs POST /auth/role {role:client} done first.",
+  { group:"Briefs", method:"POST", path:"/briefs", auth:"bearer", desc:"Client posts a brief. Needs POST /auth/role {role:client} done first. format: reel | ugc | youtube | tiktok | photo. niche (singular, one value): beauty | fitness | product | travel | food | tech.",
     body:{ title:"15s product reel for launch", format:"reel", niche:"beauty", description:"Handheld, natural light, 15s max.", budget_min:300, budget_max:600, deadline:"2026-09-02", reference_images:[] } },
   { group:"Briefs", method:"GET", path:"/briefs/mine", auth:"bearer", desc:"Client's own briefs.", query:[{name:"status", placeholder:"open"}] },
-  { group:"Briefs", method:"GET", path:"/briefs/feed", auth:"bearer", desc:"Creator's open-brief feed, defaults to their own niches.", query:[{name:"niche"},{name:"budget_min"},{name:"format"}] },
+  { group:"Briefs", method:"GET", path:"/briefs/feed", auth:"bearer", desc:"Creator's open-brief feed, defaults to their own niches.", query:[{name:"niche", placeholder:"beauty|fitness|product|travel|food|tech"},{name:"budget_min"},{name:"format", placeholder:"reel|ugc|youtube|tiktok|photo"}] },
   { group:"Briefs", method:"GET", path:"/briefs/:id", auth:"bearer", desc:"Any authenticated user." },
   { group:"Briefs", method:"PATCH", path:"/briefs/:id", auth:"bearer", desc:"Client, owner, only while status: open.",
     body:{ title:"Updated title", budget_max:650 } },
@@ -45,11 +45,11 @@ const ENDPOINTS = [
   { group:"Bids", method:"POST", path:"/bids/:id/accept", auth:"bearer", desc:"Client, brief owner. Declines other bids, creates the Deal." },
 
   // --- Creators ---
-  { group:"Creators", method:"GET", path:"/creators/search", auth:"bearer", desc:"Directory search.", query:[{name:"q"},{name:"niche"},{name:"followers_min"},{name:"followers_max"},{name:"budget_max"}] },
+  { group:"Creators", method:"GET", path:"/creators/search", auth:"bearer", desc:"Directory search.", query:[{name:"q"},{name:"niche", placeholder:"beauty|fitness|product|travel|food|tech"},{name:"followers_min"},{name:"followers_max"},{name:"budget_max"}] },
   { group:"Creators", method:"GET", path:"/creators/:id", auth:"bearer", desc:"Single creator + portfolio_items." },
 
   // --- Offers ---
-  { group:"Offers", method:"POST", path:"/offers", auth:"bearer", desc:"Client sends a direct offer. Creates/reuses a Thread as a side effect.",
+  { group:"Offers", method:"POST", path:"/offers", auth:"bearer", desc:"Client sends a direct offer. Creates/reuses a Thread as a side effect. format: reel | ugc | youtube | tiktok | photo.",
     body:{ creator_id:"", brief_id:null, price:520, format:"reel", turnaround_days:3, message:"Loved your spring campaign." } },
   { group:"Offers", method:"GET", path:"/offers/mine", auth:"bearer", desc:"Sent (client) + received (creator) offers." },
   { group:"Offers", method:"GET", path:"/offers/:id", auth:"bearer", desc:"Participant. Includes revisions[]." },
@@ -100,7 +100,7 @@ const ENDPOINTS = [
     body:{ platform:"ios", token:"fcm-or-apns-token" } },
 
   // --- Reviews ---
-  { group:"Reviews", method:"POST", path:"/deals/:id/review", auth:"bearer", desc:"Either deal party. Only once Deal.status = completed.",
+  { group:"Reviews", method:"POST", path:"/deals/:id/review", auth:"bearer", desc:"Either deal party. Only once Deal.status = completed. tags values: great_communication | on_time | high_quality.",
     body:{ rating:5, tags:["great_communication","on_time"], comment:"Would book again." } },
   { group:"Reviews", method:"GET", path:"/users/:id/reviews", auth:"bearer", desc:"Public review summary + list for a user." },
 
